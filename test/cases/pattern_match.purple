@@ -1,0 +1,7 @@
+;; Pattern matching example using ctr-tag and ctr-arg
+;; Given a quoted expression, identify if it's a literal or addition
+
+;; Check if (quote 42) is a Lit - should return 1
+(let (e (quote 42))
+  (sym-eq? (ctr-tag e) 'Cod))
+;; Result: 1 (it's wrapped in #Cod)

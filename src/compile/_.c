@@ -325,6 +325,24 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    if (nam == PURPLE_NAM_MLVL && ari == 0) {
+      fputs("#MLvl", e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_SHFT && ari == 2) {
+      fputs("#Shft{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_CTAG && ari == 1) {
+      fputs("#CTag{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
 
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);
@@ -359,7 +377,7 @@ fn void purple_compile_emit_runtime(FILE *out, Term ast, const char *runtime_pat
   free(runtime);
 
   // Emit main using Purple evaluator
-  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(#NIL, #NIL), ", out);
+  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0, #NIL, #NIL), ", out);
   purple_compile_emit(out, ast);
   fputs("))\n", out);
 }

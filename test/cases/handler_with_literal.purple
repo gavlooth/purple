@@ -1,0 +1,7 @@
+;; Test handler with literal in body
+;; This was previously causing infinite recursion
+;; Now handler bodies use default handlers
+(with-menv
+  (set-meta! 'lit (lambda (x) (+ x 100)))
+  (+ 3 4))
+;; Expected: (3+100) + (4+100) = 207

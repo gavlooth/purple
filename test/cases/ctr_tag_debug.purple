@@ -1,0 +1,3 @@
+;; Debug ctr-tag - what is the symbol value?
+;; Just return the tag symbol directly
+(ctr-tag (quote (+ 1 2)))

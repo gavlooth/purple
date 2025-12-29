@@ -44,6 +44,9 @@ static u32 PURPLE_NAM_SEQ;   // Symbol equality
 static u32 PURPLE_NAM_WMENV; // With-menv (evaluate with custom menv)
 static u32 PURPLE_NAM_CARG;  // Constructor argument extraction
 static u32 PURPLE_NAM_EVAL; // Evaluate code expression
+static u32 PURPLE_NAM_MLVL; // Meta-level introspection
+static u32 PURPLE_NAM_SHFT; // Shift n levels up
+static u32 PURPLE_NAM_CTAG; // Constructor tag
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -87,6 +90,9 @@ fn void purple_names_init(void) {
   PURPLE_NAM_WMENV = purple_nick("WMnv");
   PURPLE_NAM_CARG  = purple_nick("CArg");
   PURPLE_NAM_EVAL  = purple_nick("Eval");
+  PURPLE_NAM_MLVL  = purple_nick("MLvl");
+  PURPLE_NAM_SHFT  = purple_nick("Shft");
+  PURPLE_NAM_CTAG  = purple_nick("CTag");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -349,6 +355,18 @@ fn Term purple_term_eval(Term e) {
   return purple_ctr1(PURPLE_NAM_EVAL, e);
 }
 
+fn Term purple_term_mlvl(void) {
+  return purple_ctr0(PURPLE_NAM_MLVL);
+}
+
+fn Term purple_term_shft(Term n, Term e) {
+  return purple_ctr2(PURPLE_NAM_SHFT, n, e);
+}
+
+fn Term purple_term_ctag(Term e) {
+  return purple_ctr1(PURPLE_NAM_CTAG, e);
+}
+
 // =============================================================================
 // Parser Functions
 // =============================================================================
@@ -571,6 +589,24 @@ fn Term purple_parse_eval(PState *s) {
   return purple_term_eval(e);
 }
 
+fn Term purple_parse_mlvl(PState *s) {
+  parse_consume(s, ")");
+  return purple_term_mlvl();
+}
+
+fn Term purple_parse_shift(PState *s) {
+  Term n = parse_purple_form(s);
+  Term e = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_shft(n, e);
+}
+
+fn Term purple_parse_ctag(PState *s) {
+  Term e = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_ctag(e);
+}
+
 fn Term purple_parse_prim2(PState *s, u32 nam) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -636,6 +672,15 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "eval")) {
       return purple_parse_eval(s);
+    }
+    if (purple_symbol_is(s, start, len, "meta-level")) {
+      return purple_parse_mlvl(s);
+    }
+    if (purple_symbol_is(s, start, len, "shift")) {
+      return purple_parse_shift(s);
+    }
+    if (purple_symbol_is(s, start, len, "ctr-tag")) {
+      return purple_parse_ctag(s);
     }
     // Pink forms
     if (purple_symbol_is(s, start, len, "lambda")) {

@@ -1,0 +1,8 @@
+;; Custom app handler that adds 1 to every function result
+;; Handler receives #CON{vf, vx}, applies and adds 1
+(with-menv
+  (set-meta! 'app (lambda (args)
+    (let (result ((fst args) (snd args)))
+      (+ result 1))))
+  ((lambda (x) (+ x 10)) 5))
+;; Normal result would be 15, with +1 it's 16

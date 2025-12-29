@@ -1,0 +1,7 @@
+;; Custom if handler that inverts truth values
+;; 0 becomes true, non-0 becomes false
+(with-menv
+  (set-meta! 'if (lambda (x) (if x 0 1)))
+  (if 0 10 20))
+;; With inverted truth: 0 is now true, so we take then branch
+;; Expected: 10

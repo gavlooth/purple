@@ -1,0 +1,6 @@
+;; Traced language example
+;; Custom lit handler that triples literals (avoiding literal in handler body)
+(with-menv
+  (set-meta! 'lit (lambda (x) (+ x (+ x x))))
+  (+ 3 4))
+;; Expected: (3*3) + (4*3) = 9 + 12 = 21

@@ -1,0 +1,2 @@
+;; Simple ctr-tag test
+(ctr-tag 42)

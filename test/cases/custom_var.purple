@@ -1,0 +1,5 @@
+;; Custom var handler that returns constant 999 for all variables
+(with-menv
+  (set-meta! 'var (lambda (arg) 999))
+  (let (x 5)
+    x))  ;; Should return 999 (handler ignores actual value)

@@ -1,0 +1,2 @@
+;; Shift 2 levels up, meta-level should be 2
+(shift 2 (meta-level))

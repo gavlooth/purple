@@ -1,0 +1,10 @@
+;; Tower demonstration
+;; Shows meta-level and EM working together
+;; At base level: compute 5 + (level from one level up) + (level from two levels up)
+;;
+;; Base level = 0
+;; (EM (meta-level)) = 1
+;; (shift 2 (meta-level)) = 2
+;;
+;; Result: 5 + 1 + 2 = 8
+(+ 5 (+ (EM (meta-level)) (shift 2 (meta-level))))

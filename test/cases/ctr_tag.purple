@@ -1,0 +1,4 @@
+;; Test constructor tag extraction
+;; Quoted expression produces #Cod{...}, so tag is 'Cod
+;; sym-eq? returns 1 if equal, 0 if not
+(sym-eq? (ctr-tag (quote (+ 1 2))) 'Cod)

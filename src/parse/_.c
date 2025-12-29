@@ -1378,13 +1378,155 @@ fn Term parse_purple_form(PState *s) {
   return 0;
 }
 
+// Track included files to avoid cycles
+static char *PURPLE_INCLUDED[256];
+static u32 PURPLE_INCLUDED_LEN = 0;
+
+fn int purple_already_included(const char *path) {
+  for (u32 i = 0; i < PURPLE_INCLUDED_LEN; i++) {
+    if (strcmp(PURPLE_INCLUDED[i], path) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+fn void purple_mark_included(const char *path) {
+  if (PURPLE_INCLUDED_LEN < 256) {
+    PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = strdup(path);
+  }
+}
+
+// Process includes by text substitution
+// Returns a new source string with includes expanded
+fn char* purple_expand_includes(const char *src, u32 len, const char *base_path) {
+  // Estimate expanded size (may grow)
+  u32 cap = len * 2 + 4096;
+  char *out = malloc(cap);
+  u32 out_len = 0;
+
+  u32 pos = 0;
+  while (pos < len) {
+    // Look for (include "
+    if (pos + 10 < len &&
+        src[pos] == '(' &&
+        strncmp(src + pos + 1, "include", 7) == 0 &&
+        (src[pos + 8] == ' ' || src[pos + 8] == '\t' || src[pos + 8] == '\n')) {
+      // Skip "(include"
+      pos += 8;
+      while (pos < len && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\n')) {
+        pos++;
+      }
+      // Expect "
+      if (pos >= len || src[pos] != '"') {
+        fprintf(stderr, "PURPLE_ERROR: include expects a string path\n");
+        free(out);
+        exit(1);
+      }
+      pos++; // skip "
+      u32 path_start = pos;
+      while (pos < len && src[pos] != '"') {
+        pos++;
+      }
+      u32 path_len = pos - path_start;
+      if (pos >= len) {
+        fprintf(stderr, "PURPLE_ERROR: unterminated include path\n");
+        free(out);
+        exit(1);
+      }
+      pos++; // skip closing "
+
+      // Skip closing )
+      while (pos < len && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\n')) {
+        pos++;
+      }
+      if (pos >= len || src[pos] != ')') {
+        fprintf(stderr, "PURPLE_ERROR: include missing closing )\n");
+        free(out);
+        exit(1);
+      }
+      pos++; // skip )
+
+      // Resolve path relative to base
+      char path[512], full_path[1024];
+      memcpy(path, src + path_start, path_len);
+      path[path_len] = '\0';
+      sys_path_join(full_path, sizeof(full_path), base_path, path);
+
+      // Check if already included
+      char *abs_path = realpath(full_path, NULL);
+      if (!abs_path) {
+        fprintf(stderr, "PURPLE_ERROR: cannot find '%s'\n", full_path);
+        free(out);
+        exit(1);
+      }
+
+      if (!purple_already_included(abs_path)) {
+        purple_mark_included(abs_path);
+
+        // Read included file
+        char *inc_src = sys_file_read(abs_path);
+        if (!inc_src) {
+          fprintf(stderr, "PURPLE_ERROR: cannot read '%s'\n", abs_path);
+          free(abs_path);
+          free(out);
+          exit(1);
+        }
+        u32 inc_len = strlen(inc_src);
+
+        // Recursively expand includes
+        char *expanded = purple_expand_includes(inc_src, inc_len, abs_path);
+        free(inc_src);
+        u32 exp_len = strlen(expanded);
+
+        // Grow output buffer if needed
+        while (out_len + exp_len + 1024 > cap) {
+          cap *= 2;
+          out = realloc(out, cap);
+        }
+
+        // Append expanded content
+        memcpy(out + out_len, expanded, exp_len);
+        out_len += exp_len;
+        free(expanded);
+      }
+      free(abs_path);
+    } else {
+      // Regular character - copy it
+      if (out_len + 1 >= cap) {
+        cap *= 2;
+        out = realloc(out, cap);
+      }
+      out[out_len++] = src[pos++];
+    }
+  }
+
+  out[out_len] = '\0';
+  return out;
+}
+
 fn Term parse_purple(PState *s) {
   purple_names_init();
   PURPLE_BINDS_LEN = 0;
-  Term term = parse_purple_form(s);
-  purple_skip(s);
-  if (!parse_at_end(s)) {
-    parse_error(s, "end of file", parse_peek(s));
+  PURPLE_INCLUDED_LEN = 0;
+
+  // Expand includes before parsing
+  char *expanded = purple_expand_includes(s->src, s->len, s->file);
+  PState exp_s = {
+    .file = s->file,
+    .src = expanded,
+    .pos = 0,
+    .len = strlen(expanded),
+    .line = 1,
+    .col = 1
+  };
+
+  Term term = parse_purple_form(&exp_s);
+  purple_skip(&exp_s);
+  if (!parse_at_end(&exp_s)) {
+    parse_error(&exp_s, "end of file", parse_peek(&exp_s));
   }
+
+  free(expanded);
   return term;
 }

@@ -1,0 +1,3 @@
+; Test basic include
+(let (add (include "lib/math.purple"))
+  (add 10 32))

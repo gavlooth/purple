@@ -1,0 +1,2 @@
+; Math library - defines a function
+(lambda (x y) (+ x y))

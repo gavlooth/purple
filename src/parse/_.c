@@ -58,6 +58,7 @@ static u32 PURPLE_NAM_MLVL; // Meta-level introspection
 static u32 PURPLE_NAM_SHFT; // Shift n levels up
 static u32 PURPLE_NAM_CTAG; // Constructor tag
 static u32 PURPLE_NAM_MAT;  // Match expression
+static u32 PURPLE_NAM_NMAT; // Native match (compile-time optimized)
 static u32 PURPLE_NAM_CASE; // Match case
 static u32 PURPLE_NAM_PCTR; // Pattern: constructor
 static u32 PURPLE_NAM_PLIT; // Pattern: literal
@@ -122,6 +123,7 @@ fn void purple_names_init(void) {
   PURPLE_NAM_SHFT  = purple_nick("Shft");
   PURPLE_NAM_CTAG  = purple_nick("CTag");
   PURPLE_NAM_MAT   = purple_nick("Mat");
+  PURPLE_NAM_NMAT  = purple_nick("NMat");
   PURPLE_NAM_CASE  = purple_nick("Case");
   PURPLE_NAM_PCTR  = purple_nick("PCtr");
   PURPLE_NAM_PLIT  = purple_nick("PLit");

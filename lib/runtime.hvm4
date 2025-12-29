@@ -563,10 +563,10 @@
     _ : λ&u. #CON{1, extracted_args}  // Tags match, return the args
   }((val_tag == pattern_tag))
 
-// Try each case until one matches
+// Try each case until one matches (legacy - now compiled to native HVM4 match)
 // Returns the result of the matching case's body
-// #Cod unwrapping is handled in purple_pattern_match and purple_match_ctr
-// NOTE: Uses single-destructure pattern to avoid menv duplication issues in HVM4
+// NOTE: Pattern matching is now compiled to native HVM4 at compile-time
+// This function is kept for backward compatibility with dynamic match expressions
 @purple_try_cases = λ&menv. λ&self. λ&val. λ&cases.
   λ{#MEnv: λ&env. λ&handlers. λ&parent. λ&level.
     @purple_try_cases_inner(env, handlers, parent, level, self, val, cases)
@@ -855,6 +855,18 @@
       #Mat: λ&expr. λ&cases.
         !!&val = self(#MEnv{env, handlers, parent, level}, expr);
         @purple_try_cases(#MEnv{env, handlers, parent, level}, self, val, cases)
+      // Native match: scrutinee is evaluated, then native HVM4 pattern matching applied
+      // The matcher returns #CON{body, bindings_list} where bindings need to be added to env
+      // This is only used for simple patterns without wildcards + args (see compiler check)
+      #NMat: λ&scrutinee. λ&matcher.
+        !!&val = self(#MEnv{env, handlers, parent, level}, scrutinee);
+        !!&result = matcher(val);
+        // Extract body and bindings from result
+        λ{#CON: λ&body. λ&bindings.
+          // Bind the extracted values to the environment
+          !!&new_env = @purple_bind_all(env, bindings);
+          self(#MEnv{new_env, handlers, parent, level}, body)
+        ; _ : @pink_err(#nmat)}(result)
       #FFI: λ&name. λ&args.
         // Evaluate all arguments, return FFI marker for C driver to interpret
         !!&vargs = @purple_eval_list(#MEnv{env, handlers, parent, level}, self, args);

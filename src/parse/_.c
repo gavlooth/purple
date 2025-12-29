@@ -63,6 +63,8 @@ static u32 PURPLE_NAM_PCTR; // Pattern: constructor
 static u32 PURPLE_NAM_PLIT; // Pattern: literal
 static u32 PURPLE_NAM_PWLD; // Pattern: wildcard
 static u32 PURPLE_NAM_PVAR; // Pattern: variable (for nested)
+static u32 PURPLE_NAM_FFI;  // Foreign function call
+static u32 PURPLE_NAM_DO;   // IO sequencing
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -125,6 +127,8 @@ fn void purple_names_init(void) {
   PURPLE_NAM_PLIT  = purple_nick("PLit");
   PURPLE_NAM_PWLD  = purple_nick("PWld");
   PURPLE_NAM_PVAR  = purple_nick("PVar");
+  PURPLE_NAM_FFI   = purple_nick("FFI");
+  PURPLE_NAM_DO    = purple_nick("Do");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -467,6 +471,18 @@ fn Term purple_term_pwld(void) {
 // #PVar{name} - variable pattern (binds a name)
 fn Term purple_term_pvar(u32 name) {
   return purple_ctr1(PURPLE_NAM_PVAR, term_new_num(name));
+}
+
+// #FFI{name, args} - foreign function call
+// name is a nick-encoded symbol, args is a list
+fn Term purple_term_ffi(Term name, Term args) {
+  return purple_ctr2(PURPLE_NAM_FFI, name, args);
+}
+
+// #Do{first, rest} - IO sequencing
+// Evaluates first, discards result (unless it's the last), evaluates rest
+fn Term purple_term_do(Term first, Term rest) {
+  return purple_ctr2(PURPLE_NAM_DO, first, rest);
 }
 
 // =============================================================================
@@ -958,6 +974,97 @@ fn Term purple_parse_match(PState *s) {
   return purple_term_mat(expr, cases);
 }
 
+// Parse: (ffi "func-name" arg1 arg2 ...)
+// Returns: #FFI{name_nick, args_list}
+fn Term purple_parse_ffi(PState *s) {
+  purple_skip(s);
+
+  // Parse function name as string literal
+  if (parse_peek(s) != '"') {
+    parse_error(s, "function name string", parse_peek(s));
+  }
+  parse_advance(s);  // consume "
+
+  // Read function name
+  char func_name[256];
+  u32 name_len = 0;
+  while (parse_peek(s) != '"' && !parse_at_end(s)) {
+    if (name_len >= 255) {
+      fprintf(stderr, "PURPLE_ERROR: FFI function name too long\n");
+      exit(1);
+    }
+    func_name[name_len++] = parse_peek(s);
+    parse_advance(s);
+  }
+  func_name[name_len] = '\0';
+  parse_advance(s);  // consume "
+
+  // Nick-encode the function name (store as symbol)
+  u32 name_nick = 0;
+  for (u32 i = 0; i < name_len && i < 4; i++) {
+    name_nick = ((name_nick << 6) + nick_letter_to_b64(func_name[i])) & EXT_MASK;
+  }
+
+  // Also store full name in table for later retrieval
+  u32 name_id = table_find(func_name, name_len);
+
+  // Collect arguments
+  Term args_array[64];
+  u32 arg_count = 0;
+
+  purple_skip(s);
+  while (!parse_match(s, ")")) {
+    if (arg_count >= 64) {
+      fprintf(stderr, "PURPLE_ERROR: too many FFI arguments\n");
+      exit(1);
+    }
+    args_array[arg_count++] = parse_purple_form(s);
+    purple_skip(s);
+  }
+
+  // Build args list in reverse
+  Term args = purple_term_nil();
+  for (int i = (int)arg_count - 1; i >= 0; i--) {
+    args = purple_term_con(args_array[i], args);
+  }
+
+  // Use the full table ID for the name (so we can look it up later)
+  return purple_term_ffi(term_new_num(name_id), args);
+}
+
+// Parse: (do expr1 expr2 ... exprN)
+// Returns nested #Do{expr1, #Do{expr2, ... exprN}}
+// The last expression is the result
+fn Term purple_parse_do(PState *s) {
+  // Collect all expressions
+  Term exprs[256];
+  u32 count = 0;
+
+  purple_skip(s);
+  while (!parse_match(s, ")")) {
+    if (count >= 256) {
+      fprintf(stderr, "PURPLE_ERROR: too many expressions in do block\n");
+      exit(1);
+    }
+    exprs[count++] = parse_purple_form(s);
+    purple_skip(s);
+  }
+
+  if (count == 0) {
+    fprintf(stderr, "PURPLE_ERROR: do block requires at least one expression\n");
+    exit(1);
+  }
+
+  // Build nested Do from end to start
+  // (do e1 e2 e3) -> #Do{e1, #Do{e2, e3}}
+  Term result = exprs[count - 1];
+  for (int i = (int)count - 2; i >= 0; i--) {
+    result = purple_term_do(exprs[i], result);
+  }
+
+  return result;
+}
+
 fn Term purple_parse_prim2(PState *s, u32 nam) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -1053,6 +1160,12 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "match")) {
       return purple_parse_match(s);
+    }
+    if (purple_symbol_is(s, start, len, "ffi")) {
+      return purple_parse_ffi(s);
+    }
+    if (purple_symbol_is(s, start, len, "do")) {
+      return purple_parse_do(s);
     }
     // Pink forms
     if (purple_symbol_is(s, start, len, "lambda")) {

@@ -464,6 +464,26 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // FFI call: #FFI{name, args}
+    if (nam == PURPLE_NAM_FFI && ari == 2) {
+      fputs("#FFI{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
+    // Do sequencing: #Do{first, rest}
+    if (nam == PURPLE_NAM_DO && ari == 2) {
+      fputs("#Do{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);
     for (u32 i = 0; i < ari; i++) {

@@ -612,6 +612,29 @@
     _ : env
   }(bindings)
 
+// Evaluate a list of expressions and return evaluated list
+@purple_eval_list = λ&menv. λ&self. λ&lst.
+  λ{
+    #NIL: #NIL
+    #CON: λ&head. λ&tail.
+      !!&vh = self(menv, head);
+      !!&vt = @purple_eval_list(menv, self, tail);
+      #CON{vh, vt}
+    _ : #NIL
+  }(lst)
+
+// Continue after evaluating first expression in do block
+// If vf is an FFI marker, chain it (FFI results need special handling)
+// Otherwise, just continue evaluating rest
+@purple_do_continue = λ&menv. λ&self. λ&vf. λ&rest.
+  λ{
+    // If first result is FFI, we need to chain: #Do{#FFI{...}, rest}
+    // This allows the C driver to execute FFI calls in sequence
+    #FFI: λ&name. λ&args. #Do{#FFI{name, args}, rest}
+    // For non-FFI values, just discard and continue
+    _ : λ&u. self(menv, rest)
+  }(vf)
+
 // Stage-polymorphic Purple evaluator (with handler dispatch)
 // NOTE: Uses single-destructure pattern to avoid menv duplication issues in HVM4
 @purple_eval_poly = λ&maybe_lift. λ&self. λ&menv. λ&exp.
@@ -832,6 +855,14 @@
       #Mat: λ&expr. λ&cases.
         !!&val = self(#MEnv{env, handlers, parent, level}, expr);
         @purple_try_cases(#MEnv{env, handlers, parent, level}, self, val, cases)
+      #FFI: λ&name. λ&args.
+        // Evaluate all arguments, return FFI marker for C driver to interpret
+        !!&vargs = @purple_eval_list(#MEnv{env, handlers, parent, level}, self, args);
+        #FFI{name, vargs}
+      #Do: λ&first. λ&rest.
+        // Evaluate first, discard result, evaluate rest
+        !!&vf = self(#MEnv{env, handlers, parent, level}, first);
+        @purple_do_continue(#MEnv{env, handlers, parent, level}, self, vf, rest)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -850,5 +881,14 @@
     #Clo: λ&env. λ&body. #Clo{env, body}
     #CloR: λ&env. λ&body. #CloR{env, body}
     #MEnv: λ&e.λ&h.λ&p.λ&l. #MEnv{e, h, p, l}
+    #FFI: λ&name. λ&args. #FFI{name, @purple_unwrap_list(args)}
+    #Do: λ&first. λ&rest. #Do{@purple_unwrap(first), @purple_unwrap(rest)}
     _ : @pink_err(#punw)
   }(v)
+
+@purple_unwrap_list = λ&lst.
+  λ{
+    #NIL: #NIL
+    #CON: λ&h. λ&t. #CON{@purple_unwrap(h), @purple_unwrap_list(t)}
+    _ : lst
+  }(lst)

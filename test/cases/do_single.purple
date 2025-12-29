@@ -1,0 +1,2 @@
+; Single expression do block
+(do 99)

@@ -1,0 +1,5 @@
+; Basic do block - evaluates expressions in sequence, returns last
+(do
+  (+ 1 2)
+  (+ 3 4)
+  42)

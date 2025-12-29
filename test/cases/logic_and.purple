@@ -1,0 +1,4 @@
+; Test short-circuit AND
+; (and 1 2) should return 2
+; (and 0 999) should return 0 without evaluating 999
+(and 1 2)

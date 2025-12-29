@@ -1,0 +1,4 @@
+; Test short-circuit OR
+; (or 1 999) should return 1 without evaluating 999
+; (or 0 2) should return 2
+(or 0 2)

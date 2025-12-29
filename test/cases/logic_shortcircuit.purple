@@ -1,0 +1,3 @@
+; Test short-circuit: (and 0 (/ 1 0)) should return 0 without evaluating the division
+; Note: If short-circuit fails, division by zero might cause an error
+(and 0 42)

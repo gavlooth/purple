@@ -1,0 +1,3 @@
+;; Test eval with dynamic code construction
+(let (x (lift 10))
+  (+ (eval x) 5))

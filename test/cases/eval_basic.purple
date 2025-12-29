@@ -1,0 +1,2 @@
+;; Test basic eval: evaluate quoted code
+(eval (code (+ 1 2)))

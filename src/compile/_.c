@@ -319,6 +319,12 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    if (nam == PURPLE_NAM_EVAL && ari == 1) {
+      fputs("#Eval{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
 
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);

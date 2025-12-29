@@ -1,0 +1,2 @@
+;; Test quote and eval together
+(eval (quote (+ 5 7)))

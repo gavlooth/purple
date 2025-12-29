@@ -543,6 +543,9 @@
       !!&vc = self(menv, c);
       !!&vi = self(menv, i);
       @purple_ctr_arg(vc, vi)
+    #Eval: λ&e.
+      !!&ve = self(menv, e);
+      λ{#Cod: λ&code. self(menv, code); _ : @pink_err(#eval)}(ve)
     _ : @pink_err(#pexp)
   }(exp)
 

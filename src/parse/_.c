@@ -43,6 +43,7 @@ static u32 PURPLE_NAM_MENV;
 static u32 PURPLE_NAM_SEQ;   // Symbol equality
 static u32 PURPLE_NAM_WMENV; // With-menv (evaluate with custom menv)
 static u32 PURPLE_NAM_CARG;  // Constructor argument extraction
+static u32 PURPLE_NAM_EVAL; // Evaluate code expression
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -85,6 +86,7 @@ fn void purple_names_init(void) {
   PURPLE_NAM_SEQ   = purple_nick("SEq");
   PURPLE_NAM_WMENV = purple_nick("WMnv");
   PURPLE_NAM_CARG  = purple_nick("CArg");
+  PURPLE_NAM_EVAL  = purple_nick("Eval");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -343,6 +345,10 @@ fn Term purple_term_carg(Term ctr, Term idx) {
   return purple_ctr2(PURPLE_NAM_CARG, ctr, idx);
 }
 
+fn Term purple_term_eval(Term e) {
+  return purple_ctr1(PURPLE_NAM_EVAL, e);
+}
+
 // =============================================================================
 // Parser Functions
 // =============================================================================
@@ -559,6 +565,12 @@ fn Term purple_parse_ctrarg(PState *s) {
   return purple_term_carg(ctr, idx);
 }
 
+fn Term purple_parse_eval(PState *s) {
+  Term e = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_eval(e);
+}
+
 fn Term purple_parse_prim2(PState *s, u32 nam) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -622,6 +634,9 @@ fn Term parse_purple_list(PState *s) {
     if (purple_symbol_is(s, start, len, "ctr-arg")) {
       return purple_parse_ctrarg(s);
     }
+    if (purple_symbol_is(s, start, len, "eval")) {
+      return purple_parse_eval(s);
+    }
     // Pink forms
     if (purple_symbol_is(s, start, len, "lambda")) {
       return purple_parse_lambda(s);
@@ -640,6 +655,9 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "code")) {
       return purple_parse_code(s);
+    }
+    if (purple_symbol_is(s, start, len, "quote")) {
+      return purple_parse_code(s);  // quote is alias for code
     }
     if (purple_symbol_is(s, start, len, "+")) {
       return purple_parse_prim2(s, PURPLE_NAM_ADD);

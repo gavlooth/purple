@@ -273,6 +273,22 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    if (nam == PURPLE_NAM_DIV && ari == 2) {
+      fputs("#Div{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_MOD && ari == 2) {
+      fputs("#Mod{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
 
     // Pairs
     if (nam == PURPLE_NAM_CON && ari == 2) {

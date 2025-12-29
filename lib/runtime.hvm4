@@ -719,6 +719,22 @@
         #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Ge{ca, cb}}; _ : @pink_err(#ge)}(vb)
         _ : @pink_err(#ge)
       }(va)
+    #Div: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na / nb)}); _ : @pink_err(#div)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Div{ca, cb}}; _ : @pink_err(#div)}(vb)
+        _ : @pink_err(#div)
+      }(va)
+    #Mod: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na % nb)}); _ : @pink_err(#mod)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Mod{ca, cb}}; _ : @pink_err(#mod)}(vb)
+        _ : @pink_err(#mod)
+      }(va)
     #CON: λ&a. λ&b.
       !!&va = self(menv, a);
       !!&vb = self(menv, b);

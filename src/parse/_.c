@@ -33,6 +33,8 @@ static u32 PURPLE_NAM_LT;
 static u32 PURPLE_NAM_GT;
 static u32 PURPLE_NAM_LE;
 static u32 PURPLE_NAM_GE;
+static u32 PURPLE_NAM_DIV;
+static u32 PURPLE_NAM_MOD;
 static u32 PURPLE_NAM_CON;
 static u32 PURPLE_NAM_NIL;
 static u32 PURPLE_NAM_FST;
@@ -90,6 +92,8 @@ fn void purple_names_init(void) {
   PURPLE_NAM_GT   = purple_nick("Gt");
   PURPLE_NAM_LE   = purple_nick("Le");
   PURPLE_NAM_GE   = purple_nick("Ge");
+  PURPLE_NAM_DIV  = purple_nick("Div");
+  PURPLE_NAM_MOD  = purple_nick("Mod");
   PURPLE_NAM_CON  = NAM_CON;
   PURPLE_NAM_NIL  = NAM_NIL;
   PURPLE_NAM_FST  = purple_nick("Fst");
@@ -340,6 +344,14 @@ fn Term purple_term_le(Term a, Term b) {
 
 fn Term purple_term_ge(Term a, Term b) {
   return purple_ctr2(PURPLE_NAM_GE, a, b);
+}
+
+fn Term purple_term_div(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_DIV, a, b);
+}
+
+fn Term purple_term_mod(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_MOD, a, b);
 }
 
 fn Term purple_term_con(Term a, Term b) {
@@ -855,6 +867,10 @@ fn Term purple_parse_prim2(PState *s, u32 nam) {
     return purple_term_le(a, b);
   } else if (nam == PURPLE_NAM_GE) {
     return purple_term_ge(a, b);
+  } else if (nam == PURPLE_NAM_DIV) {
+    return purple_term_div(a, b);
+  } else if (nam == PURPLE_NAM_MOD) {
+    return purple_term_mod(a, b);
   } else if (nam == PURPLE_NAM_CON) {
     return purple_term_con(a, b);
   } else {
@@ -966,6 +982,12 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, ">=")) {
       return purple_parse_prim2(s, PURPLE_NAM_GE);
+    }
+    if (purple_symbol_is(s, start, len, "/")) {
+      return purple_parse_prim2(s, PURPLE_NAM_DIV);
+    }
+    if (purple_symbol_is(s, start, len, "%")) {
+      return purple_parse_prim2(s, PURPLE_NAM_MOD);
     }
     if (purple_symbol_is(s, start, len, "cons")) {
       return purple_parse_prim2(s, PURPLE_NAM_CON);

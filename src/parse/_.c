@@ -40,7 +40,9 @@ static u32 PURPLE_NAM_CLAM;
 static u32 PURPLE_NAM_GMTA;
 static u32 PURPLE_NAM_SMTA;
 static u32 PURPLE_NAM_MENV;
-static u32 PURPLE_NAM_SEQ;  // Symbol equality
+static u32 PURPLE_NAM_SEQ;   // Symbol equality
+static u32 PURPLE_NAM_WMENV; // With-menv (evaluate with custom menv)
+static u32 PURPLE_NAM_CARG;  // Constructor argument extraction
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -80,7 +82,9 @@ fn void purple_names_init(void) {
   PURPLE_NAM_GMTA = purple_nick("GMta");
   PURPLE_NAM_SMTA = purple_nick("SMta");
   PURPLE_NAM_MENV = purple_nick("MEnv");
-  PURPLE_NAM_SEQ  = purple_nick("SEq");
+  PURPLE_NAM_SEQ   = purple_nick("SEq");
+  PURPLE_NAM_WMENV = purple_nick("WMnv");
+  PURPLE_NAM_CARG  = purple_nick("CArg");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -113,6 +117,32 @@ fn int purple_bind_lookup(u32 sym, u32 *out_idx) {
   return 0;
 }
 
+// Skip semicolon-style comments
+fn void purple_skip_comment(PState *s) {
+  while (!parse_at_end(s) && parse_peek(s) != '\n') {
+    parse_advance(s);
+  }
+}
+
+// Skip whitespace and comments (Lisp style with ;)
+fn void purple_skip(PState *s) {
+  while (!parse_at_end(s)) {
+    if (parse_is_space(parse_peek(s))) {
+      parse_advance(s);
+      continue;
+    }
+    if (parse_peek(s) == ';') {
+      purple_skip_comment(s);
+      continue;
+    }
+    if (parse_starts_with(s, "//")) {
+      purple_skip_comment(s);
+      continue;
+    }
+    break;
+  }
+}
+
 fn int purple_is_delim(char c) {
   if (c == '(' || c == ')') {
     return 1;
@@ -124,7 +154,7 @@ fn int purple_is_delim(char c) {
 }
 
 fn int purple_parse_symbol_token(PState *s, u32 *out_start, u32 *out_len) {
-  parse_skip(s);
+  purple_skip(s);
   char c = parse_peek(s);
   if (c == '\0' || c == '(' || c == ')') {
     return 0;
@@ -141,7 +171,7 @@ fn int purple_parse_symbol_token(PState *s, u32 *out_start, u32 *out_len) {
     parse_advance(s);
   }
   u32 len = s->pos - start;
-  parse_skip(s);
+  purple_skip(s);
   if (len == 0) {
     return 0;
   }
@@ -151,7 +181,7 @@ fn int purple_parse_symbol_token(PState *s, u32 *out_start, u32 *out_len) {
 }
 
 fn u32 purple_parse_number(PState *s) {
-  parse_skip(s);
+  purple_skip(s);
   u32 n = 0;
   char c = parse_peek(s);
   if (!isdigit(c)) {
@@ -162,7 +192,7 @@ fn u32 purple_parse_number(PState *s) {
     n = (u32)(n * 10 + (u32)(c - '0'));
     parse_advance(s);
   }
-  parse_skip(s);
+  purple_skip(s);
   return n;
 }
 
@@ -305,6 +335,14 @@ fn Term purple_term_seq(Term a, Term b) {
   return purple_ctr2(PURPLE_NAM_SEQ, a, b);
 }
 
+fn Term purple_term_wmenv(Term menv_expr, Term body) {
+  return purple_ctr2(PURPLE_NAM_WMENV, menv_expr, body);
+}
+
+fn Term purple_term_carg(Term ctr, Term idx) {
+  return purple_ctr2(PURPLE_NAM_CARG, ctr, idx);
+}
+
 // =============================================================================
 // Parser Functions
 // =============================================================================
@@ -325,7 +363,7 @@ fn Term parse_purple_form(PState *s);
 
 fn Term purple_parse_app_rest(PState *s, Term head) {
   while (1) {
-    parse_skip(s);
+    purple_skip(s);
     if (parse_match(s, ")")) {
       break;
     }
@@ -336,7 +374,7 @@ fn Term purple_parse_app_rest(PState *s, Term head) {
 }
 
 fn Term purple_parse_lambda(PState *s) {
-  parse_skip(s);
+  purple_skip(s);
   u32 self_id = 0;
   int has_self = 0;
   if (parse_peek(s) != '(') {
@@ -351,7 +389,7 @@ fn Term purple_parse_lambda(PState *s) {
   parse_consume(s, "(");
   u32 params[256];
   u32 count = 0;
-  parse_skip(s);
+  purple_skip(s);
   if (parse_match(s, ")")) {
     parse_error(s, "parameter", ')');
   }
@@ -366,7 +404,7 @@ fn Term purple_parse_lambda(PState *s) {
       exit(1);
     }
     params[count++] = table_find(s->src + start, len);
-    parse_skip(s);
+    purple_skip(s);
     if (parse_match(s, ")")) {
       break;
     }
@@ -445,11 +483,11 @@ fn Term purple_parse_em(PState *s) {
 }
 
 fn Term purple_parse_clambda(PState *s) {
-  parse_skip(s);
+  purple_skip(s);
   parse_consume(s, "(");
   u32 params[256];
   u32 count = 0;
-  parse_skip(s);
+  purple_skip(s);
   if (parse_match(s, ")")) {
     parse_error(s, "parameter", ')');
   }
@@ -464,7 +502,7 @@ fn Term purple_parse_clambda(PState *s) {
       exit(1);
     }
     params[count++] = table_find(s->src + start, len);
-    parse_skip(s);
+    purple_skip(s);
     if (parse_match(s, ")")) {
       break;
     }
@@ -507,6 +545,20 @@ fn Term purple_parse_symeq(PState *s) {
   return purple_term_seq(a, b);
 }
 
+fn Term purple_parse_withmenv(PState *s) {
+  Term menv_expr = parse_purple_form(s);
+  Term body = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_wmenv(menv_expr, body);
+}
+
+fn Term purple_parse_ctrarg(PState *s) {
+  Term ctr = parse_purple_form(s);
+  Term idx = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_carg(ctr, idx);
+}
+
 fn Term purple_parse_prim2(PState *s, u32 nam) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -541,7 +593,7 @@ fn Term purple_parse_prim1(PState *s, u32 nam) {
 }
 
 fn Term parse_purple_list(PState *s) {
-  parse_skip(s);
+  purple_skip(s);
   if (parse_match(s, ")")) {
     parse_error(s, "non-empty list", ')');
   }
@@ -563,6 +615,12 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "sym-eq?")) {
       return purple_parse_symeq(s);
+    }
+    if (purple_symbol_is(s, start, len, "with-menv")) {
+      return purple_parse_withmenv(s);
+    }
+    if (purple_symbol_is(s, start, len, "ctr-arg")) {
+      return purple_parse_ctrarg(s);
     }
     // Pink forms
     if (purple_symbol_is(s, start, len, "lambda")) {
@@ -616,12 +674,13 @@ fn Term parse_purple_list(PState *s) {
 }
 
 fn Term parse_purple_form(PState *s) {
-  parse_skip(s);
+  purple_skip(s);
   if (parse_at_end(s)) {
     parse_error(s, "form", '\0');
   }
   char c = parse_peek(s);
-  // Quoted symbol: 'foo -> #Sym{foo}
+  // Quoted symbol: 'foo -> #Sym{nick_id}
+  // Uses nick encoding so symbols can be matched against HVM4 constructors
   if (c == '\'') {
     parse_advance(s);
     u32 start = 0;
@@ -629,8 +688,12 @@ fn Term parse_purple_form(PState *s) {
     if (!purple_parse_symbol_token(s, &start, &len)) {
       parse_error(s, "symbol after quote", parse_peek(s));
     }
-    u32 sym_id = table_find(s->src + start, len);
-    return purple_term_sym(sym_id);
+    // Nick-encode the symbol (max 4 chars)
+    u32 k = 0;
+    for (u32 i = 0; i < len && i < 4; i++) {
+      k = ((k << 6) + nick_letter_to_b64(s->src[start + i])) & EXT_MASK;
+    }
+    return purple_term_sym(k);
   }
   if (c == '(') {
     parse_advance(s);
@@ -653,7 +716,7 @@ fn Term parse_purple(PState *s) {
   purple_names_init();
   PURPLE_BINDS_LEN = 0;
   Term term = parse_purple_form(s);
-  parse_skip(s);
+  purple_skip(s);
   if (!parse_at_end(s)) {
     parse_error(s, "end of file", parse_peek(s));
   }

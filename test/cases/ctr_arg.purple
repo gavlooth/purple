@@ -1,0 +1,3 @@
+;; Test ctr-arg extraction
+(let (e (lift 42))
+  (ctr-arg e 0))

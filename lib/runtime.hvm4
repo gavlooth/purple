@@ -210,8 +210,9 @@
 @purple_get3c = λ&exp. λ{<>: λ&x. λ&y. λ&z. z; []: @pink_err(#get)}(exp)
 
 // Default handler implementations
-@purple_h_lit = λ&menv. λ&self. λ&exp.
-  λ{#Lit: λ&n. #Cst{n}; _ : @pink_err(#lit)}(exp)
+// Handlers wrapped in #HFn for tagged dispatch
+// Lit handler receives #Cst{n}, returns a value
+@purple_h_lit = #HFn{λ&v. v}
 
 @purple_h_var = λ&menv. λ&self. λ&exp.
   λ{#Var: λ&idx.
@@ -342,14 +343,65 @@
   λ{#Sym: λ&s. @purple_htab_get_by_sym(handlers, s); _ : @pink_err(#gmta)}(key)
 
 // Set handler and return new menv (helper for SMta)
+// Automatically wraps closures for handler dispatch
 @purple_set_handler = λ&menv. λ&key. λ&val.
   λ{#Sym: λ&s.
     !!&handlers = @purple_menv_handlers(menv);
-    !!&new_handlers = @purple_htab_set_by_sym(handlers, s, val);
+    !!&wrapped = @purple_wrap_handler(val);
+    !!&new_handlers = @purple_htab_set_by_sym(handlers, s, wrapped);
     !!&env = @purple_menv_env(menv);
     !!&parent = @purple_menv_parent(menv);
     #MEnv{env, new_handlers, parent}
   ; _ : @pink_err(#smta)}(key)
+
+// Call a handler with one argument
+// Uses tagged handlers to avoid expensive closure pattern matching:
+// - #HFn{fn} for HVM4 functions (default handlers)
+// - Purple closures (#Clo) must be wrapped with @purple_wrap_handler before storing
+@purple_call1 = λ&menv. λ&self. λ&handler. λ&arg.
+  λ{
+    #HFn: λ&f. f(arg)
+    #HClo: λ&e. λ&b. self(#MEnv{#CON{arg, e}, @purple_menv_handlers(menv), @purple_menv_parent(menv)}, b)
+    _ : @pink_err(#h1)
+  }(handler)
+
+// Wrap a Purple closure for use as a handler
+@purple_wrap_handler = λ&clo.
+  λ{#Clo: λ&e. λ&b. #HClo{e, b}; _ : @pink_err(#wh)}(clo)
+
+// Constructor argument extraction
+// For runtime introspection of AST nodes
+@purple_ctr_arg = λ&ctr. λ&idx.
+  λ{
+    #Cst: λ&n.
+      // Extract from constructor by index
+      λ{
+        #Lit: λ&a. λ{0: #Cst{a}; _ : @pink_err(#carg)}(n)
+        #Sym: λ&a. λ{0: #Sym{a}; _ : @pink_err(#carg)}(n)
+        #Var: λ&a. λ{0: #Cst{a}; _ : @pink_err(#carg)}(n)
+        #Lam: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #LamR: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #App: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #Let: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #If: λ&a. λ&b. λ&c. λ{0: a; 1: b; 2: c; _ : @pink_err(#carg)}(n)
+        #Add: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #Sub: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #Mul: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #Eql: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #CON: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #NIL: @pink_err(#carg)
+        #Lft: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #Run: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #Cod: λ&a. λ{0: #Cod{a}; _ : @pink_err(#carg)}(n)
+        #Fst: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #Snd: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #EM: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        #CLam: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
+        _ : @pink_err(#carg)
+      }(ctr)
+    #Cod: λ&ic. λ{#Cod: λ&cc. #Cod{#CArg{cc, ic}}; _ : @pink_err(#carg)}(ctr)
+    _ : @pink_err(#carg)
+  }(idx)
 
 // Purple application (uses menv)
 @purple_apply_menv = λ&menv. λ&self. λ&vf. λ&vx.
@@ -364,11 +416,14 @@
     _ : @pink_err(#app)
   }(vf)
 
-// Stage-polymorphic Purple evaluator (simplified - direct Pink behavior, handlers only for Purple forms)
+// Stage-polymorphic Purple evaluator (with handler dispatch)
 @purple_eval_poly = λ&maybe_lift. λ&self. λ&menv. λ&exp.
   !!&env = @purple_menv_env(menv);
+  !!&handlers = @purple_menv_handlers(menv);
   λ{
-    #Lit: λ&n. maybe_lift(#Cst{n})
+    #Lit: λ&n.
+      !!&h = @purple_htab_get(handlers, 0);
+      maybe_lift(@purple_call1(menv, self, h, #Cst{n}))
     #Sym: λ&s. maybe_lift(#Sym{s})
     #Var: λ&n. maybe_lift(@pink_env_get(env, n))
     #Lam: λ&body. maybe_lift(#Clo{env, body})
@@ -481,6 +536,13 @@
         #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#SEq{ca, cb}}; _ : @pink_err(#seq)}(vb)
         _ : @pink_err(#seq)
       }(va)
+    #WMnv: λ&m. λ&body.
+      !!&new_menv = self(menv, m);
+      λ{#MEnv: λ&e. λ&h. λ&p. self(new_menv, body); _ : @pink_err(#wmenv)}(new_menv)
+    #CArg: λ&c. λ&i.
+      !!&vc = self(menv, c);
+      !!&vi = self(menv, i);
+      @purple_ctr_arg(vc, vi)
     _ : @pink_err(#pexp)
   }(exp)
 

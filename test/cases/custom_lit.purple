@@ -1,0 +1,5 @@
+;; Custom lit handler that doubles all literals
+;; Handler receives x = #Cst{n}, returns doubled value
+(with-menv
+  (set-meta! 'lit (lambda (x) (+ x x)))
+  (+ 3 4))

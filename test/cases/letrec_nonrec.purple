@@ -1,0 +1,6 @@
+; Test letrec structure without actually recursing
+(letrec ((f (lambda (n)
+  (if (= n 0)
+    42
+    42))))
+  (f 0))

@@ -569,6 +569,93 @@ fn Term purple_parse_let(PState *s) {
   return purple_term_let(val, body);
 }
 
+// letrec: (letrec ((name (lambda (x) body))) expr)
+// Transforms to: (let (name (lambda name (x) body)) expr)
+// The lambda becomes a recursive lambda with name as self-reference
+fn Term purple_parse_letrec(PState *s) {
+  parse_consume(s, "(");  // outer paren of bindings list
+  parse_consume(s, "(");  // inner paren of first binding
+  u32 name_start = 0;
+  u32 name_len   = 0;
+  if (!purple_parse_symbol_token(s, &name_start, &name_len)) {
+    parse_error(s, "binding name", parse_peek(s));
+  }
+  u32 name_id = table_find(s->src + name_start, name_len);
+
+  // Expect a lambda expression: (lambda (params...) body)
+  purple_skip(s);
+  if (!parse_match(s, "(")) {
+    parse_error(s, "(lambda ...)", parse_peek(s));
+  }
+  purple_skip(s);
+  u32 kw_start = 0;
+  u32 kw_len = 0;
+  if (!purple_parse_symbol_token(s, &kw_start, &kw_len)) {
+    parse_error(s, "lambda", parse_peek(s));
+  }
+  if (!purple_symbol_is(s, kw_start, kw_len, "lambda")) {
+    parse_error(s, "lambda", parse_peek(s));
+  }
+
+  // Parse the lambda with name_id as self-reference
+  purple_skip(s);
+  parse_consume(s, "(");
+  u32 params[256];
+  u32 count = 0;
+  purple_skip(s);
+  if (parse_match(s, ")")) {
+    parse_error(s, "parameter", ')');
+  }
+  while (1) {
+    u32 start = 0;
+    u32 len   = 0;
+    if (!purple_parse_symbol_token(s, &start, &len)) {
+      parse_error(s, "parameter", parse_peek(s));
+    }
+    if (count >= 256) {
+      fprintf(stderr, "PURPLE_ERROR: too many parameters\n");
+      exit(1);
+    }
+    params[count++] = table_find(s->src + start, len);
+    purple_skip(s);
+    if (parse_match(s, ")")) {
+      break;
+    }
+  }
+  if (count == 0) {
+    fprintf(stderr, "PURPLE_ERROR: letrec lambda requires at least one parameter\n");
+    exit(1);
+  }
+
+  // Push self-reference (name_id) first, then parameters
+  purple_bind_push(name_id);  // self reference at depth = count
+  for (u32 i = 0; i < count; i++) {
+    purple_bind_push(params[i]);
+  }
+  Term lam_body = parse_purple_form(s);
+  purple_bind_pop(count + 1);
+  parse_consume(s, ")");  // close lambda
+  parse_consume(s, ")");  // close binding (inner paren)
+  parse_consume(s, ")");  // close bindings list (outer paren)
+
+  // Build recursive lambda: nested lambdas with outermost being LamR
+  for (u32 i = 0; i < count; i++) {
+    if (i == count - 1) {
+      lam_body = purple_term_lamr(lam_body);
+    } else {
+      lam_body = purple_term_lam(lam_body);
+    }
+  }
+
+  // Now parse the expression with name bound
+  purple_bind_push(name_id);
+  Term expr = parse_purple_form(s);
+  purple_bind_pop(1);
+  parse_consume(s, ")");
+
+  return purple_term_let(lam_body, expr);
+}
+
 fn Term purple_parse_if(PState *s) {
   Term cond = parse_purple_form(s);
   Term tval = parse_purple_form(s);
@@ -967,6 +1054,9 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "let")) {
       return purple_parse_let(s);
+    }
+    if (purple_symbol_is(s, start, len, "letrec")) {
+      return purple_parse_letrec(s);
     }
     if (purple_symbol_is(s, start, len, "if")) {
       return purple_parse_if(s);

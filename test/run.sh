@@ -2,13 +2,13 @@
 # Purple test runner
 
 PURPLE_DIR="$(dirname "$0")/.."
-PURPLE="$PURPLE_DIR/src/main"
+PURPLE="$PURPLE_DIR/purple"
 HVM4="${HVM4:-$PURPLE_DIR/hvm4/clang/main}"
 
 # Build if needed
 if [ ! -f "$PURPLE" ]; then
   echo "Building Purple compiler..."
-  clang -O2 -o "$PURPLE" "$PURPLE_DIR/src/main.c"
+  (cd "$PURPLE_DIR/src" && clang -O2 -o ../purple main.c)
 fi
 
 if [ ! -f "$HVM4" ]; then
@@ -22,9 +22,9 @@ FAIL=0
 for test in "$PURPLE_DIR"/test/cases/*.purple; do
   name=$(basename "$test" .purple)
   rm -f /tmp/purple_test.hvm4
-  "$PURPLE" "$test" > /tmp/purple_test.hvm4 2>&1
+  "$PURPLE" "$test" > /tmp/purple_test.hvm4 2>/tmp/purple_test.err
   if [ $? -ne 0 ]; then
-    echo "FAIL: $name (compile error)"
+    echo "FAIL: $name -> $(cat /tmp/purple_test.err | head -1)"
     FAIL=$((FAIL + 1))
     continue
   fi

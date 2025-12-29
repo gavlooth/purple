@@ -1,0 +1,3 @@
+; Basic let with lambda (no letrec)
+(let (f (lambda (n) (+ n 1)))
+  (f 5))

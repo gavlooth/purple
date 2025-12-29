@@ -1,0 +1,6 @@
+; Minimal test: countdown from 1
+(letrec ((count (lambda (n)
+  (if (= n 0)
+    0
+    (count (- n 1))))))
+  (count 1))

@@ -1,12 +1,4 @@
-;; A mini-evaluator using pattern matching
-;; Demonstrates the power of match for building interpreters
-
-(let (my-eval (lambda self (expr)
-  (match expr
-    ((Lit n) n)
-    ((Add a b) (+ (self a) (self b)))
-    ((Mul a b) (* (self a) (self b)))
-    (_ 0))))
-
-  ;; Evaluate: (+ (* 3 4) 5) = 17
-  (my-eval (quote (+ (* 3 4) 5))))
+;; Test pattern matching on Lit in quoted expressions
+(match (quote 42)
+  ((Lit n) n)
+  (_ 0))

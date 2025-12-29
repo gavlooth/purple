@@ -1,0 +1,501 @@
+// Purple runtime (extends Pink with reflection)
+// Implements the conceptually infinite tower from "Collapsing Towers"
+
+// =============================================================================
+// Pink Base Runtime (copied for self-containment)
+// =============================================================================
+
+// Error constructor with symbol payload
+@pink_err = λ&msg. #Err{msg}
+
+@pink_env_head = λ&env. λ{<>: λ&a. λ&b. a; []: @pink_err(#env)}(env)
+@pink_env_tail = λ&env. λ{<>: λ&a. λ&b. b; []: @pink_err(#env)}(env)
+
+@pink_env_get = λ&env. λ&idx.
+  λ{0: @pink_env_head(env);
+     λ&n. @pink_env_get(@pink_env_tail(env), (n - 1))}(idx)
+
+@pink_reify = λ&v.
+  λ{
+    #Cst: λ&n. #Lit{n}
+    #Sym: λ&s. #Sym{s}
+    #CON: λ&a. λ&b. #CON{@pink_reify(a), @pink_reify(b)}
+    #NIL: #NIL
+    #Cod: λ&e. #Cod{e}
+    #Clo: λ&env. λ&body.
+      !!&cv = @pink_evalc(#CON{#Cod{#Var{0}}, env}, body);
+      λ{#Cod: λ&code. #Lam{code}; _ : @pink_err(#rfy)}(cv)
+    #CloR: λ&env. λ&body.
+      !!&cv = @pink_evalc(#CON{#Cod{#Var{0}}, #CON{#Cod{#Var{1}}, env}}, body);
+      λ{#Cod: λ&code. #LamR{code}; _ : @pink_err(#rfy)}(cv)
+    _ : @pink_err(#rfy)
+  }(v)
+
+@pink_lift = λ&v.
+  λ{
+    #Cod: λ&code. #Cod{code}
+    _ : λ&u. #Cod{@pink_reify(v)}
+  }(v)
+
+@pink_apply = λ&vf. λ&vx.
+  λ{
+    #Clo: λ&cenv. λ&body. @pink_eval(#CON{vx, cenv}, body)
+    #CloR: λ&cenv. λ&body. @pink_eval(#CON{vx, #CON{vf, cenv}}, body)
+    #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
+    _ : @pink_err(#app)
+  }(vf)
+
+@pink_eval_poly = λ&maybe_lift. λ&self. λ&env. λ&exp.
+  λ{
+    #Lit: λ&n. maybe_lift(#Cst{n})
+    #Sym: λ&s. maybe_lift(#Sym{s})
+    #Var: λ&n. maybe_lift(@pink_env_get(env, n))
+    #Lam: λ&body. maybe_lift(#Clo{env, body})
+    #LamR: λ&body. maybe_lift(#CloR{env, body})
+    #App: λ&f. λ&x.
+      !!&vf = self(env, f);
+      !!&vx = self(env, x);
+      @pink_apply(vf, vx)
+    #Let: λ&val. λ&body.
+      !!&vv = self(env, val);
+      self(#CON{vv, env}, body)
+    #If: λ&c. λ&t. λ&e.
+      !!&vc = self(env, c);
+      λ{
+        #Cst: λ&n. λ{0: self(env, e); λ&m. self(env, t)}(n)
+        #Cod: λ&cc.
+          !!&vt = @pink_evalc(env, t);
+          !!&ve = @pink_evalc(env, e);
+          λ{#Cod: λ&tc. λ{#Cod: λ&ec. #Cod{#If{cc, tc, ec}}; _ : @pink_err(#if)}(ve); _ : @pink_err(#if)}(vt)
+        _ : @pink_err(#if)
+      }(vc)
+    #Lft: λ&e.
+      !!&v = self(env, e);
+      @pink_lift(v)
+    #Run: λ&b. λ&e.
+      !!&vb = self(env, b);
+      λ{
+        #Cod: λ&bc.
+          !!&vc = @pink_evalc(env, e);
+          λ{#Cod: λ&ec. #Cod{#Run{bc, ec}}; _ : @pink_err(#run)}(vc)
+        _ : λ&u.
+          !!&vc = @pink_evalc(env, e);
+          λ{#Cod: λ&ec. self(env, ec); _ : @pink_err(#run)}(vc)
+      }(vb)
+    #Cod: λ&e. #Cod{e}
+    #Add: λ&a. λ&b.
+      !!&va = self(env, a);
+      !!&vb = self(env, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na + nb)}); _ : @pink_err(#add)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Add{ca, cb}}; _ : @pink_err(#add)}(vb)
+        _ : @pink_err(#add)
+      }(va)
+    #Sub: λ&a. λ&b.
+      !!&va = self(env, a);
+      !!&vb = self(env, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na - nb)}); _ : @pink_err(#sub)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Sub{ca, cb}}; _ : @pink_err(#sub)}(vb)
+        _ : @pink_err(#sub)
+      }(va)
+    #Mul: λ&a. λ&b.
+      !!&va = self(env, a);
+      !!&vb = self(env, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na * nb)}); _ : @pink_err(#mul)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Mul{ca, cb}}; _ : @pink_err(#mul)}(vb)
+        _ : @pink_err(#mul)
+      }(va)
+    #Eql: λ&a. λ&b.
+      !!&va = self(env, a);
+      !!&vb = self(env, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na == nb)}); _ : @pink_err(#eql)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Eql{ca, cb}}; _ : @pink_err(#eql)}(vb)
+        _ : @pink_err(#eql)
+      }(va)
+    #CON: λ&a. λ&b.
+      !!&va = self(env, a);
+      !!&vb = self(env, b);
+      λ{
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#CON{ca, cb}}; _ : @pink_err(#con)}(vb)
+        _ : λ&u. maybe_lift(#CON{va, vb})
+      }(va)
+    #NIL: maybe_lift(#NIL)
+    #Fst: λ&p.
+      !!&vp = self(env, p);
+      λ{
+        #CON: λ&a. λ&b. a
+        #Cod: λ&pc. #Cod{#Fst{pc}}
+        _ : @pink_err(#fst)
+      }(vp)
+    #Snd: λ&p.
+      !!&vp = self(env, p);
+      λ{
+        #CON: λ&a. λ&b. b
+        #Cod: λ&pc. #Cod{#Snd{pc}}
+        _ : @pink_err(#snd)
+      }(vp)
+    _ : @pink_err(#exp)
+  }(exp)
+
+@pink_eval  = @pink_eval_poly(λv.v, @pink_eval)
+@pink_evalc = @pink_eval_poly(@pink_lift, @pink_evalc)
+
+@pink_unwrap = λ&v.
+  λ{
+    #Cst: λ&n. n
+    #Sym: λ&s. #Sym{s}
+    #CON: λ&a. λ&b. #CON{@pink_unwrap(a), @pink_unwrap(b)}
+    #NIL: #NIL
+    #Cod: λ&e. #Cod{e}
+    #Clo: λ&env. λ&body. #Clo{env, body}
+    #CloR: λ&env. λ&body. #CloR{env, body}
+    _ : @pink_err(#unw)
+  }(v)
+
+// =============================================================================
+// Purple Runtime Extensions
+// =============================================================================
+
+// Meta-environment: #MEnv{env, handlers, parent}
+// - env: variable bindings (same as Pink)
+// - handlers: #HTab{...} of eval handlers
+// - parent: parent meta-environment (lazy, #NIL if not yet created)
+
+@purple_menv_env = λ&m. λ{#MEnv: λ&e. λ&h. λ&p. e; _ : @pink_err(#menv)}(m)
+@purple_menv_handlers = λ&m. λ{#MEnv: λ&e. λ&h. λ&p. h; _ : @pink_err(#menv)}(m)
+@purple_menv_parent = λ&m. λ{#MEnv: λ&e. λ&h. λ&p. p; _ : @pink_err(#menv)}(m)
+
+// Create new meta-environment with default handlers
+@purple_menv_new = λ&parent. λ&env.
+  #MEnv{env, @purple_default_handlers, parent}
+
+// Ensure parent meta-environment exists (lazy creation)
+@purple_ensure_parent = λ&menv.
+  !!&parent = @purple_menv_parent(menv);
+  λ{
+    #NIL: @purple_menv_new(#NIL, #NIL)
+    _ : parent
+  }(parent)
+
+// Update menv with new env (preserves handlers and parent)
+@purple_menv_with_env = λ&menv. λ&new_env.
+  !!&h = @purple_menv_handlers(menv);
+  !!&p = @purple_menv_parent(menv);
+  #MEnv{new_env, h, p}
+
+// Purple application helper
+@purple_apply = λ&menv. λ&self. λ&vf. λ&vx.
+  λ{
+    #Clo: λ&cenv. λ&body.
+      !!&new_env = #CON{vx, cenv};
+      !!&new_menv = @purple_menv_with_env(menv, new_env);
+      self(new_menv, body)
+    #CloR: λ&cenv. λ&body.
+      !!&new_env = #CON{vx, #CON{vf, cenv}};
+      !!&new_menv = @purple_menv_with_env(menv, new_env);
+      self(new_menv, body)
+    #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
+    _ : @pink_err(#app)
+  }(vf)
+
+// Helper: extract first element of a constructor
+@purple_get1 = λ&exp. λ{<>: λ&x. x; []: @pink_err(#get)}(exp)
+@purple_get2a = λ&exp. λ{<>: λ&x. λ&y. x; []: @pink_err(#get)}(exp)
+@purple_get2b = λ&exp. λ{<>: λ&x. λ&y. y; []: @pink_err(#get)}(exp)
+@purple_get3a = λ&exp. λ{<>: λ&x. λ&y. λ&z. x; []: @pink_err(#get)}(exp)
+@purple_get3b = λ&exp. λ{<>: λ&x. λ&y. λ&z. y; []: @pink_err(#get)}(exp)
+@purple_get3c = λ&exp. λ{<>: λ&x. λ&y. λ&z. z; []: @pink_err(#get)}(exp)
+
+// Default handler implementations
+@purple_h_lit = λ&menv. λ&self. λ&exp.
+  λ{#Lit: λ&n. #Cst{n}; _ : @pink_err(#lit)}(exp)
+
+@purple_h_var = λ&menv. λ&self. λ&exp.
+  λ{#Var: λ&idx.
+    !!&env = @purple_menv_env(menv);
+    @pink_env_get(env, idx)
+  ; _ : @pink_err(#var)}(exp)
+
+@purple_h_lam = λ&menv. λ&self. λ&exp.
+  λ{#Lam: λ&body.
+    !!&env = @purple_menv_env(menv);
+    #Clo{env, body}
+  ; _ : @pink_err(#lam)}(exp)
+
+@purple_h_app = λ&menv. λ&self. λ&exp.
+  λ{#App: λ&f. λ&x.
+    !!&vf = self(menv, f);
+    !!&vx = self(menv, x);
+    @purple_apply(menv, self, vf, vx)
+  ; _ : @pink_err(#app)}(exp)
+
+@purple_h_if = λ&menv. λ&self. λ&exp.
+  λ{#If: λ&c. λ&t. λ&e.
+    !!&vc = self(menv, c);
+    λ{
+      #Cst: λ&n. λ{0: self(menv, e); λ&m. self(menv, t)}(n)
+      #Cod: λ&cc.
+        !!&vt = @purple_evalc(menv, t);
+        !!&ve = @purple_evalc(menv, e);
+        λ{#Cod: λ&tc. λ{#Cod: λ&ec. #Cod{#If{cc, tc, ec}}; _ : @pink_err(#if)}(ve); _ : @pink_err(#if)}(vt)
+      _ : @pink_err(#if)
+    }(vc)
+  ; _ : @pink_err(#if)}(exp)
+
+@purple_h_lft = λ&menv. λ&self. λ&exp.
+  λ{#Lft: λ&e.
+    !!&v = self(menv, e);
+    @pink_lift(v)
+  ; _ : @pink_err(#lft)}(exp)
+
+@purple_h_run = λ&menv. λ&self. λ&exp.
+  λ{#Run: λ&b. λ&e.
+    !!&vb = self(menv, b);
+    λ{
+      #Cst: λ&n.
+        !!&vc = @purple_evalc(menv, e);
+        λ{#Cod: λ&ec. self(menv, ec); _ : @pink_err(#run)}(vc)
+      #Cod: λ&bc.
+        !!&vc = @purple_evalc(menv, e);
+        λ{#Cod: λ&ec. #Cod{#Run{bc, ec}}; _ : @pink_err(#run)}(vc)
+      _ : @pink_err(#run)
+    }(vb)
+  ; _ : @pink_err(#run)}(exp)
+
+// EM handler: execute at meta-level
+@purple_h_em = λ&menv. λ&self. λ&exp.
+  λ{#EM: λ&e.
+    !!&parent = @purple_ensure_parent(menv);
+    self(parent, e)
+  ; _ : @pink_err(#em)}(exp)
+
+// clambda handler: compile under current semantics
+@purple_h_clam = λ&menv. λ&self. λ&exp.
+  λ{#CLam: λ&body.
+    !!&compiled = @purple_evalc(menv, #Lam{body});
+    λ{#Cod: λ&code. self(menv, code); _ : @pink_err(#clam)}(compiled)
+  ; _ : @pink_err(#clam)}(exp)
+
+// Default handler table
+@purple_default_handlers = #HTab{
+  @purple_h_lit,
+  @purple_h_var,
+  @purple_h_lam,
+  @purple_h_app,
+  @purple_h_if,
+  @purple_h_lft,
+  @purple_h_run,
+  @purple_h_em,
+  @purple_h_clam
+}
+
+// Handler table accessors (0-indexed)
+@purple_htab_get = λ&t. λ&idx.
+  λ{#HTab: λ&h0.λ&h1.λ&h2.λ&h3.λ&h4.λ&h5.λ&h6.λ&h7.λ&h8.
+    λ{0: h0; 1: h1; 2: h2; 3: h3; 4: h4; 5: h5; 6: h6; 7: h7; 8: h8; _ : @pink_err(#hidx)}(idx)
+  ; _ : @pink_err(#htab)}(t)
+
+// Symbol to handler index mapping
+// Maps handler name symbols to indices: lit=0, var=1, lam=2, app=3, if=4, lft=5, run=6, em=7, clam=8
+@purple_sym_to_idx = λ&sym.
+  λ{
+    #lit: 0
+    #var: 1
+    #lam: 2
+    #app: 3
+    #if: 4
+    #lft: 5
+    #run: 6
+    #em: 7
+    #clam: 8
+    _ : @pink_err(#symi)
+  }(sym)
+
+// Get handler by symbol name
+@purple_htab_get_by_sym = λ&t. λ&sym.
+  !!&idx = @purple_sym_to_idx(sym);
+  @purple_htab_get(t, idx)
+
+// Set handler by symbol name (returns new htab)
+@purple_htab_set_by_sym = λ&t. λ&sym. λ&handler.
+  !!&idx = @purple_sym_to_idx(sym);
+  λ{#HTab: λ&h0.λ&h1.λ&h2.λ&h3.λ&h4.λ&h5.λ&h6.λ&h7.λ&h8.
+    λ{
+      0: #HTab{handler, h1, h2, h3, h4, h5, h6, h7, h8}
+      1: #HTab{h0, handler, h2, h3, h4, h5, h6, h7, h8}
+      2: #HTab{h0, h1, handler, h3, h4, h5, h6, h7, h8}
+      3: #HTab{h0, h1, h2, handler, h4, h5, h6, h7, h8}
+      4: #HTab{h0, h1, h2, h3, handler, h5, h6, h7, h8}
+      5: #HTab{h0, h1, h2, h3, h4, handler, h6, h7, h8}
+      6: #HTab{h0, h1, h2, h3, h4, h5, handler, h7, h8}
+      7: #HTab{h0, h1, h2, h3, h4, h5, h6, handler, h8}
+      8: #HTab{h0, h1, h2, h3, h4, h5, h6, h7, handler}
+      _ : @pink_err(#hset)
+    }(idx)
+  ; _ : @pink_err(#htab)}(t)
+
+// Get handler from symbol (helper for GMta)
+@purple_get_handler = λ&handlers. λ&key.
+  λ{#Sym: λ&s. @purple_htab_get_by_sym(handlers, s); _ : @pink_err(#gmta)}(key)
+
+// Set handler and return new menv (helper for SMta)
+@purple_set_handler = λ&menv. λ&key. λ&val.
+  λ{#Sym: λ&s.
+    !!&handlers = @purple_menv_handlers(menv);
+    !!&new_handlers = @purple_htab_set_by_sym(handlers, s, val);
+    !!&env = @purple_menv_env(menv);
+    !!&parent = @purple_menv_parent(menv);
+    #MEnv{env, new_handlers, parent}
+  ; _ : @pink_err(#smta)}(key)
+
+// Purple application (uses menv)
+@purple_apply_menv = λ&menv. λ&self. λ&vf. λ&vx.
+  λ{
+    #Clo: λ&cenv. λ&body.
+      !!&new_menv = @purple_menv_with_env(menv, #CON{vx, cenv});
+      self(new_menv, body)
+    #CloR: λ&cenv. λ&body.
+      !!&new_menv = @purple_menv_with_env(menv, #CON{vx, #CON{vf, cenv}});
+      self(new_menv, body)
+    #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
+    _ : @pink_err(#app)
+  }(vf)
+
+// Stage-polymorphic Purple evaluator (simplified - direct Pink behavior, handlers only for Purple forms)
+@purple_eval_poly = λ&maybe_lift. λ&self. λ&menv. λ&exp.
+  !!&env = @purple_menv_env(menv);
+  λ{
+    #Lit: λ&n. maybe_lift(#Cst{n})
+    #Sym: λ&s. maybe_lift(#Sym{s})
+    #Var: λ&n. maybe_lift(@pink_env_get(env, n))
+    #Lam: λ&body. maybe_lift(#Clo{env, body})
+    #LamR: λ&body. maybe_lift(#CloR{env, body})
+    #App: λ&f. λ&x.
+      !!&vf = self(menv, f);
+      !!&vx = self(menv, x);
+      @purple_apply_menv(menv, self, vf, vx)
+    #Let: λ&val. λ&body.
+      !!&vv = self(menv, val);
+      !!&new_menv = @purple_menv_with_env(menv, #CON{vv, env});
+      self(new_menv, body)
+    #If: λ&c. λ&t. λ&e.
+      !!&vc = self(menv, c);
+      λ{
+        #Cst: λ&n. λ{0: self(menv, e); λ&m. self(menv, t)}(n)
+        #Cod: λ&cc.
+          !!&vt = @purple_evalc(menv, t);
+          !!&ve = @purple_evalc(menv, e);
+          λ{#Cod: λ&tc. λ{#Cod: λ&ec. #Cod{#If{cc, tc, ec}}; _ : @pink_err(#if)}(ve); _ : @pink_err(#if)}(vt)
+        _ : @pink_err(#if)
+      }(vc)
+    #Lft: λ&e.
+      !!&v = self(menv, e);
+      @pink_lift(v)
+    #Run: λ&b. λ&e.
+      !!&vb = self(menv, b);
+      λ{
+        #Cod: λ&bc.
+          !!&vc = @purple_evalc(menv, e);
+          λ{#Cod: λ&ec. #Cod{#Run{bc, ec}}; _ : @pink_err(#run)}(vc)
+        _ : λ&u.
+          !!&vc = @purple_evalc(menv, e);
+          λ{#Cod: λ&ec. self(menv, ec); _ : @pink_err(#run)}(vc)
+      }(vb)
+    #Cod: λ&e. #Cod{e}
+    #Add: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na + nb)}); _ : @pink_err(#add)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Add{ca, cb}}; _ : @pink_err(#add)}(vb)
+        _ : @pink_err(#add)
+      }(va)
+    #Sub: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na - nb)}); _ : @pink_err(#sub)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Sub{ca, cb}}; _ : @pink_err(#sub)}(vb)
+        _ : @pink_err(#sub)
+      }(va)
+    #Mul: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na * nb)}); _ : @pink_err(#mul)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Mul{ca, cb}}; _ : @pink_err(#mul)}(vb)
+        _ : @pink_err(#mul)
+      }(va)
+    #Eql: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cst: λ&na. λ{#Cst: λ&nb. maybe_lift(#Cst{(na == nb)}); _ : @pink_err(#eql)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Eql{ca, cb}}; _ : @pink_err(#eql)}(vb)
+        _ : @pink_err(#eql)
+      }(va)
+    #CON: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#CON{ca, cb}}; _ : @pink_err(#con)}(vb)
+        _ : λ&u. maybe_lift(#CON{va, vb})
+      }(va)
+    #NIL: maybe_lift(#NIL)
+    #Fst: λ&p.
+      !!&vp = self(menv, p);
+      λ{
+        #CON: λ&a. λ&b. a
+        #Cod: λ&pc. #Cod{#Fst{pc}}
+        _ : @pink_err(#fst)
+      }(vp)
+    #Snd: λ&p.
+      !!&vp = self(menv, p);
+      λ{
+        #CON: λ&a. λ&b. b
+        #Cod: λ&pc. #Cod{#Snd{pc}}
+        _ : @pink_err(#snd)
+      }(vp)
+    #EM: λ&e.
+      !!&parent = @purple_ensure_parent(menv);
+      self(parent, e)
+    #CLam: λ&body.
+      !!&compiled = @purple_evalc(menv, #Lam{body});
+      λ{#Cod: λ&code. self(menv, code); _ : @pink_err(#clam)}(compiled)
+    #GMta: λ&key.
+      !!&vk = self(menv, key);
+      !!&handlers = @purple_menv_handlers(menv);
+      @purple_get_handler(handlers, vk)
+    #SMta: λ&key. λ&val.
+      !!&vk = self(menv, key);
+      !!&vv = self(menv, val);
+      @purple_set_handler(menv, vk, vv)
+    #SEq: λ&a. λ&b.
+      !!&va = self(menv, a);
+      !!&vb = self(menv, b);
+      λ{
+        #Sym: λ&sa. λ{#Sym: λ&sb. maybe_lift(#Cst{(sa == sb)}); _ : @pink_err(#seq)}(vb)
+        #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#SEq{ca, cb}}; _ : @pink_err(#seq)}(vb)
+        _ : @pink_err(#seq)
+      }(va)
+    _ : @pink_err(#pexp)
+  }(exp)
+
+@purple_eval  = @purple_eval_poly(λv.v, @purple_eval)
+@purple_evalc = @purple_eval_poly(@pink_lift, @purple_evalc)
+
+@purple_unwrap = λ&v.
+  λ{
+    #Cst: λ&n. n
+    #Sym: λ&s. #Sym{s}
+    #CON: λ&a. λ&b. #CON{@purple_unwrap(a), @purple_unwrap(b)}
+    #NIL: #NIL
+    #Cod: λ&e. #Cod{e}
+    #Clo: λ&env. λ&body. #Clo{env, body}
+    #CloR: λ&env. λ&body. #CloR{env, body}
+    #MEnv: λ&e.λ&h.λ&p. #MEnv{e, h, p}
+    _ : @pink_err(#punw)
+  }(v)

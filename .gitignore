@@ -1,0 +1,14 @@
+# Build outputs
+src/purplec
+*.o
+*.out
+
+# Test outputs
+*.hvm4
+!lib/runtime.hvm4
+
+# Editor files
+*.swp
+*~
+.vscode/
+.idea/

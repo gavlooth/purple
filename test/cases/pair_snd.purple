@@ -1,0 +1,2 @@
+; Test pair construction and snd
+(snd (cons 42 100))

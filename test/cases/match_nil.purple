@@ -1,0 +1,4 @@
+; Test matching on nil
+(match nil
+  ((NIL) 42)
+  (_ 0))

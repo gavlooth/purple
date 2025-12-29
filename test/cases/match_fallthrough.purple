@@ -1,0 +1,5 @@
+; Test match falling through to wildcard
+(match 5
+  (0 100)
+  (1 200)
+  (_ 42))

@@ -1,0 +1,2 @@
+; Test equality returning false (0)
+(= 42 43)

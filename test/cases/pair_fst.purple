@@ -1,0 +1,2 @@
+; Test pair construction and fst
+(fst (cons 42 100))

@@ -1,0 +1,5 @@
+; Test matching on nested constructor
+(let (p (cons 10 20))
+  (match p
+    ((CON a b) (+ a b))
+    (_ 0)))

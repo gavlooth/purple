@@ -1,0 +1,9 @@
+; Test string as list - basic extraction
+; Recursive pattern matching has limitations, so just test basic CON extraction
+(let (s "hi")
+  (match s
+    ((CON head tail)
+      (match head
+        ((CHR c) c)
+        (_ 0)))
+    (_ 999)))

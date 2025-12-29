@@ -1,0 +1,6 @@
+; Test countdown to zero (returns final state)
+(letrec ((countdown (lambda (n acc)
+  (if (<= n 0)
+    acc
+    (countdown (- n 1) (+ acc n))))))
+  (countdown 5 0))

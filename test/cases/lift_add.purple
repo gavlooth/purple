@@ -1,0 +1,4 @@
+; Test lift with addition (should generate code)
+(let (x (lift 10))
+  (let (y (lift 32))
+    (run 0 (code (+ x y)))))

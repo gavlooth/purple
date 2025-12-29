@@ -1,0 +1,3 @@
+; Test nested lambda applications
+(let (add (lambda (x) (lambda (y) (+ x y))))
+  ((add 10) 32))

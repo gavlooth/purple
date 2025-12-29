@@ -1,0 +1,6 @@
+; Test nested if expressions
+(if (> 10 5)
+  (if (< 3 7)
+    42
+    0)
+  99)

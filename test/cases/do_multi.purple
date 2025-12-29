@@ -1,0 +1,5 @@
+; Test do with multiple pure expressions (returns last)
+(do
+  (+ 1 1)
+  (+ 2 2)
+  (+ 20 22))

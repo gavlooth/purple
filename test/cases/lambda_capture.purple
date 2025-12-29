@@ -1,0 +1,4 @@
+; Test lambda capturing outer variable
+(let (x 10)
+  (let (f (lambda (y) (+ x y)))
+    (f 32)))

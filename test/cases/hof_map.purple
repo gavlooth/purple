@@ -1,0 +1,4 @@
+; Test higher-order function (apply twice)
+(let (apply-twice (lambda (f x) (f (f x))))
+  (let (inc (lambda (n) (+ n 1)))
+    (apply-twice inc 40)))

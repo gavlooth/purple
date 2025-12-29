@@ -1,0 +1,4 @@
+; Test character code extraction
+(match #\A
+  ((CHR c) c)
+  (_ 0))

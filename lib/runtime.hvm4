@@ -487,6 +487,7 @@
 
 // Check if a value matches a pattern
 // Returns #CON{matched?, bindings_list} where bindings_list is values to bind
+// For quoted expressions (#Cod), unwraps and matches against inner value
 @purple_pattern_match = λ&val. λ&pattern.
   λ{
     // Wildcard matches anything, no bindings
@@ -496,116 +497,68 @@
     #PVar: λ&name. #CON{1, #CON{val, #NIL}}
 
     // Literal pattern matches if value equals literal
-    #PLit: λ&n.
-      λ{
-        #Cst: λ&v. #CON{(v == n), #NIL}
-        _ : #CON{0, #NIL}
-      }(val)
+    // Uses helper to handle #Cod unwrapping (can't reuse pattern after matching)
+    #PLit: λ&n. @purple_match_lit(val, n)
 
     // Constructor pattern matches if value has same tag
-    #PCtr: λ&tag. λ&arg_names.
-      @purple_match_ctr(val, tag, arg_names)
+    // Uses helper to handle #Cod unwrapping (can't reuse pattern after matching)
+    #PCtr: λ&tag. λ&arg_names. @purple_match_ctr(val, tag, arg_names)
 
     _ : #CON{0, #NIL}
   }(pattern)
 
+// Helper for literal pattern matching with #Cod unwrapping
+@purple_match_lit = λ&val. λ&n.
+  λ{
+    #Cst: λ&v. #CON{(v == n), #NIL}
+    #Cod: λ&inner. @purple_match_lit(inner, n)
+    _ : #CON{0, #NIL}
+  }(val)
+
 // Match a constructor pattern against a value
 // tag is the nick-encoded constructor name
 // arg_names is a list of name IDs (ignored, we just need count)
+// Handles #Cod unwrapping for quoted expressions
+// NOTE: Can't use val in default case (HVM4 limitation), so handle each constructor explicitly
 @purple_match_ctr = λ&val. λ&tag. λ&arg_names.
-  // Get the actual tag of the value
-  !!&val_tag = @purple_ctr_tag_num(val);
   λ{
-    0: #CON{0, #NIL}  // No tag (not a constructor)
-    _ : λ&u.
-      // Compare tags
-      λ{
-        0: #CON{0, #NIL}  // Tags don't match
-        _ : λ&u2.
-          // Tags match, extract arguments
-          @purple_extract_args(val, arg_names, 0)
-      }((val_tag == tag))
-  }(val_tag)
-
-// Get constructor tag as a number (not wrapped in #Sym)
-// Values computed using nick encoding: '_'=0, 'a'-'z'=1-26, 'A'-'Z'=27-52, '0'-'9'=53-62, '$'=63
-@purple_ctr_tag_num = λ&ctr.
-  λ{
-    #Lit: λ&a. 156244
-    #Sym: λ&a. 185933
-    #Var: λ&a. 196690
-    #Lam: λ&a. 155725
-    #LamR: λ&a. 9966444
-    #App: λ&a. λ&b. 111632
-    #Let: λ&a. λ&b. 155988
-    #If: λ&a. λ&b. λ&c. 2246
-    #Add: λ&a. λ&b. 110852
-    #Sub: λ&a. λ&b. 185666
-    #Mul: λ&a. λ&b. 161100
-    #Eql: λ&a. λ&b. 128076
-    #CON: λ&a. λ&b. 121448
-    #NIL: 166118
-    #Lft: λ&a. 156052
-    #Run: λ&a. λ&b. 181582
-    #Cod: λ&a. 119748
-    #Fst: λ&a. 132308
-    #Snd: λ&a. 185220
-    #EM: λ&a. 2023
-    #CLam: λ&a. 7757901
-    #Cst: λ&a. 120020
-    #Clo: λ&a. λ&b. 119567
-    #CloR: λ&a. λ&b. 7652332
-    _ : 0
-  }(ctr)
-
-// Extract arguments from a constructor value
-// Returns #CON{1, bindings_list}
-@purple_extract_args = λ&val. λ&names. λ&idx.
-  λ{
-    #NIL: #CON{1, #NIL}  // No more args to extract
-    #CON: λ&name. λ&rest.
-      !!&arg = @purple_ctr_arg_by_idx(val, idx);
-      !!&rest_result = @purple_extract_args(val, rest, (idx + 1));
-      λ{#CON: λ&ok. λ&bindings. #CON{ok, #CON{arg, bindings}}; _ : #CON{0, #NIL}}(rest_result)
-    _ : #CON{0, #NIL}
-  }(names)
-
-// Extract constructor argument by index (simpler version)
-@purple_ctr_arg_by_idx = λ&ctr. λ&idx.
-  λ{
-    #Lit: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
-    #Sym: λ&a. λ{0: #Sym{a}; _ : @pink_err(#idx)}(idx)
-    #Var: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
-    #Lam: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
-    #LamR: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
-    #App: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #Let: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #If: λ&a. λ&b. λ&c. λ{0: a; 1: b; 2: c; _ : @pink_err(#idx)}(idx)
-    #Add: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #Sub: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #Mul: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #Eql: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #CON: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #NIL: @pink_err(#idx)
-    #Lft: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
-    #Run: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
-    #Cod: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
-    #Cst: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
-    #Clo: λ&e. λ&b. λ{0: e; 1: b; _ : @pink_err(#idx)}(idx)
-    #CloR: λ&e. λ&b. λ{0: e; 1: b; _ : @pink_err(#idx)}(idx)
-    _ : @pink_err(#carg)
-  }(ctr)
-
-// Unwrap #Cod if present (for matching on quoted expressions)
-@purple_unwrap_cod = λ&val.
-  λ{
-    #Cod: λ&inner. inner
-    _ : val
+    #Cod: λ&inner. @purple_match_ctr(inner, tag, arg_names)
+    #Lit: λ&a. @purple_match_tag_extract(156244, tag, #CON{#Cst{a}, #NIL}, arg_names)
+    #Sym: λ&a. @purple_match_tag_extract(185933, tag, #CON{#Sym{a}, #NIL}, arg_names)
+    #Var: λ&a. @purple_match_tag_extract(196690, tag, #CON{#Cst{a}, #NIL}, arg_names)
+    #Lam: λ&a. @purple_match_tag_extract(155725, tag, #CON{a, #NIL}, arg_names)
+    #LamR: λ&a. @purple_match_tag_extract(9966444, tag, #CON{a, #NIL}, arg_names)
+    #App: λ&a. λ&b. @purple_match_tag_extract(111632, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #Let: λ&a. λ&b. @purple_match_tag_extract(155988, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #If: λ&a. λ&b. λ&c. @purple_match_tag_extract(2246, tag, #CON{a, #CON{b, #CON{c, #NIL}}}, arg_names)
+    #Add: λ&a. λ&b. @purple_match_tag_extract(110852, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #Sub: λ&a. λ&b. @purple_match_tag_extract(185666, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #Mul: λ&a. λ&b. @purple_match_tag_extract(161100, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #Eql: λ&a. λ&b. @purple_match_tag_extract(128076, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #CON: λ&a. λ&b. @purple_match_tag_extract(121448, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #NIL: @purple_match_tag_extract(166118, tag, #NIL, arg_names)
+    #Lft: λ&a. @purple_match_tag_extract(156052, tag, #CON{a, #NIL}, arg_names)
+    #Run: λ&a. λ&b. @purple_match_tag_extract(181582, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #Fst: λ&a. @purple_match_tag_extract(132308, tag, #CON{a, #NIL}, arg_names)
+    #Snd: λ&a. @purple_match_tag_extract(185220, tag, #CON{a, #NIL}, arg_names)
+    #EM: λ&a. @purple_match_tag_extract(2023, tag, #CON{a, #NIL}, arg_names)
+    #CLam: λ&a. @purple_match_tag_extract(7757901, tag, #CON{a, #NIL}, arg_names)
+    #Cst: λ&a. @purple_match_tag_extract(120020, tag, #CON{#Cst{a}, #NIL}, arg_names)
+    #Clo: λ&e. λ&b. @purple_match_tag_extract(119567, tag, #CON{e, #CON{b, #NIL}}, arg_names)
+    #CloR: λ&e. λ&b. @purple_match_tag_extract(7652332, tag, #CON{e, #CON{b, #NIL}}, arg_names)
+    _ : #CON{0, #NIL}  // Unknown constructor - no match
   }(val)
+
+// Compare tags and return extracted args if match
+@purple_match_tag_extract = λ&val_tag. λ&pattern_tag. λ&extracted_args. λ&arg_names.
+  λ{
+    0: #CON{0, #NIL}  // Tags don't match
+    _ : λ&u. #CON{1, extracted_args}  // Tags match, return the args
+  }((val_tag == pattern_tag))
 
 // Try each case until one matches
 // Returns the result of the matching case's body
-// Note: #Cod unwrapping for quoted expressions is not yet supported
+// #Cod unwrapping is handled in purple_pattern_match and purple_match_ctr
 @purple_try_cases = λ&menv. λ&self. λ&val. λ&cases.
   @purple_try_cases_inner(menv, self, val, cases)
 

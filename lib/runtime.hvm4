@@ -883,6 +883,16 @@
     #MEnv: λ&e.λ&h.λ&p.λ&l. #MEnv{e, h, p, l}
     #FFI: λ&name. λ&args. #FFI{name, @purple_unwrap_list(args)}
     #Do: λ&first. λ&rest. #Do{@purple_unwrap(first), @purple_unwrap(rest)}
+    // AST nodes that may appear in unevaluated code (for FFI continuations)
+    #Lit: λ&n. #Lit{n}
+    #Var: λ&n. #Var{n}
+    #Lam: λ&b. #Lam{@purple_unwrap(b)}
+    #App: λ&f. λ&x. #App{@purple_unwrap(f), @purple_unwrap(x)}
+    #Let: λ&v. λ&b. #Let{@purple_unwrap(v), @purple_unwrap(b)}
+    #If: λ&c. λ&t. λ&e. #If{@purple_unwrap(c), @purple_unwrap(t), @purple_unwrap(e)}
+    #Add: λ&a. λ&b. #Add{@purple_unwrap(a), @purple_unwrap(b)}
+    #Sub: λ&a. λ&b. #Sub{@purple_unwrap(a), @purple_unwrap(b)}
+    #Mul: λ&a. λ&b. #Mul{@purple_unwrap(a), @purple_unwrap(b)}
     _ : @pink_err(#punw)
   }(v)
 

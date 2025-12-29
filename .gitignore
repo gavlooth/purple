@@ -1,4 +1,6 @@
 # Build outputs
+purple
+purple-run
 src/purplec
 *.o
 *.out

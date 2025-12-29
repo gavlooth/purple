@@ -1,0 +1,3 @@
+; Test puts FFI - prints "Hello, FFI!" to stdout
+; FFI calls work best when they're the final computation
+(ffi "puts" "Hello, FFI!")

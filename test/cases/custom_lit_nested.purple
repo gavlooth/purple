@@ -1,0 +1,5 @@
+;; Test nested with-menv and handler restoration
+(let (x (with-menv
+          (set-meta! 'lit (lambda (v) (+ v v)))
+          (+ 10 20)))  ;; 10*2 + 20*2 = 60
+  (+ x 1))  ;; 60 + 1 = 61 (outer scope has default handler)

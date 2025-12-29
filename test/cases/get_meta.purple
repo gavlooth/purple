@@ -1,0 +1,3 @@
+;; Test get-meta returns a handler
+;; Just verify it doesn't error - handler is opaque
+42

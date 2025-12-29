@@ -1,0 +1,5 @@
+;; Test binding in pattern
+(match (quote 42)
+  ((Lit n) n)
+  (_ 0))
+;; Expected: 42

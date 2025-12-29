@@ -255,18 +255,24 @@
 
 // App handler receives #CON{vf, vx} (evaluated function and argument)
 // Returns the result of application
-// Default: applies function normally using @purple_apply_default
+// Note: This is a placeholder - actual application uses @purple_apply_menv
 @purple_h_app = #HFn{λ&args.
-  λ{#CON: λ&vf. λ&vx. @purple_apply_default(vf, vx); _ : @pink_err(#happ)}(args)}
+  λ{#CON: λ&vf. λ&vx. @purple_apply_simple(vf, vx); _ : @pink_err(#happ)}(args)}
 
-// Default application (without menv/self for use in handlers)
-@purple_apply_default = λ&vf. λ&vx.
+// Simple application using purple_eval with fresh menv
+// Used by app handler (which doesn't have menv context)
+@purple_apply_simple = λ&vf. λ&vx.
   λ{
-    #Clo: λ&cenv. λ&body. @pink_eval(#CON{vx, cenv}, body)
-    #CloR: λ&cenv. λ&body. @pink_eval(#CON{vx, #CON{vf, cenv}}, body)
+    #Clo: λ&cenv. λ&body.
+      @purple_eval(@purple_menv_new(0, #NIL, #CON{vx, cenv}), body)
+    #CloR: λ&cenv. λ&body.
+      @purple_eval(@purple_menv_new(0, #NIL, #CON{vx, #CON{vf, cenv}}), body)
     #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
     _ : @pink_err(#app)
   }(vf)
+
+// Default application (for pink compatibility)
+@purple_apply_default = λ&vf. λ&vx. @purple_apply_simple(vf, vx)
 
 // If handler receives #Cst{n} (evaluated condition), returns #Cst{truth_value}
 // truth_value: 0 = false (take else branch), non-0 = true (take then branch)
@@ -433,33 +439,32 @@
 
 // Constructor tag extraction - returns the constructor name as a symbol
 // Nick encoding: '_'=0, 'a'-'z'=1-26, 'A'-'Z'=27-52, '0'-'9'=53-62, '$'=63
-// Value = chars encoded left-to-right, each char << 6
 @purple_ctr_tag = λ&ctr.
   λ{
-    #Lit: λ&a. #Sym{796500}      // L=38,i=9,t=20 -> (38<<12)+(9<<6)+20
-    #Sym: λ&a. #Sym{851613}      // S=45,y=25,m=13
-    #Var: λ&a. #Sym{928658}      // V=48,a=1,r=18
-    #Lam: λ&a. #Sym{775949}      // L=38,a=1,m=13
-    #LamR: λ&a. #Sym{49660818}   // L=38,a=1,m=13,R=44
-    #App: λ&a. λ&b. #Sym{111120} // A=27,p=16,p=16
-    #Let: λ&a. λ&b. #Sym{781332} // L=38,e=5,t=20
-    #If: λ&a. λ&b. λ&c. #Sym{2310} // I=35,f=6
-    #Add: λ&a. λ&b. #Sym{111748} // A=27,d=4,d=4
-    #Sub: λ&a. λ&b. #Sym{852226} // S=45,u=21,b=2
-    #Mul: λ&a. λ&b. #Sym{810380} // M=39,u=21,l=12
-    #Eql: λ&a. λ&b. #Sym{361228} // E=31,q=17,l=12
-    #CON: λ&a. λ&b. #Sym{119502} // C=29,O=41,N=40
-    #NIL: #Sym{836684}           // N=40,I=35,L=38
-    #Lft: λ&a. #Sym{784660}      // L=38,f=6,t=20
-    #Run: λ&a. λ&b. #Sym{848462} // R=44,u=21,n=14
-    #Cod: λ&a. #Sym{119748}      // C=29,o=15,d=4
-    #Fst: λ&a. #Sym{380436}      // F=32,s=19,t=20
-    #Snd: λ&a. #Sym{850756}      // S=45,n=14,d=4
-    #EM: λ&a. #Sym{2029}         // E=31,M=39
-    #CLam: λ&a. #Sym{7676685}    // C=29,L=38,a=1,m=13
-    #Cst: λ&a. #Sym{120852}      // C=29,s=19,t=20
-    #Clo: λ&a. λ&b. #Sym{120335} // C=29,l=12,o=15
-    #CloR: λ&a. λ&b. #Sym{7701484} // C=29,l=12,o=15,R=44
+    #Lit: λ&a. #Sym{156244}
+    #Sym: λ&a. #Sym{185933}
+    #Var: λ&a. #Sym{196690}
+    #Lam: λ&a. #Sym{155725}
+    #LamR: λ&a. #Sym{9966444}
+    #App: λ&a. λ&b. #Sym{111632}
+    #Let: λ&a. λ&b. #Sym{155988}
+    #If: λ&a. λ&b. λ&c. #Sym{2246}
+    #Add: λ&a. λ&b. #Sym{110852}
+    #Sub: λ&a. λ&b. #Sym{185666}
+    #Mul: λ&a. λ&b. #Sym{161100}
+    #Eql: λ&a. λ&b. #Sym{128076}
+    #CON: λ&a. λ&b. #Sym{121448}
+    #NIL: #Sym{166118}
+    #Lft: λ&a. #Sym{156052}
+    #Run: λ&a. λ&b. #Sym{181582}
+    #Cod: λ&a. #Sym{119748}
+    #Fst: λ&a. #Sym{132308}
+    #Snd: λ&a. #Sym{185220}
+    #EM: λ&a. #Sym{2023}
+    #CLam: λ&a. #Sym{7757901}
+    #Cst: λ&a. #Sym{120020}
+    #Clo: λ&a. λ&b. #Sym{119567}
+    #CloR: λ&a. λ&b. #Sym{7652332}
     _ : @pink_err(#ctag)
   }(ctr)
 
@@ -476,14 +481,181 @@
     _ : @pink_err(#app)
   }(vf)
 
+// =============================================================================
+// Pattern Matching Support
+// =============================================================================
+
+// Check if a value matches a pattern
+// Returns #CON{matched?, bindings_list} where bindings_list is values to bind
+@purple_pattern_match = λ&val. λ&pattern.
+  λ{
+    // Wildcard matches anything, no bindings
+    #PWld: #CON{1, #NIL}
+
+    // Variable pattern matches anything, binds the value
+    #PVar: λ&name. #CON{1, #CON{val, #NIL}}
+
+    // Literal pattern matches if value equals literal
+    #PLit: λ&n.
+      λ{
+        #Cst: λ&v. #CON{(v == n), #NIL}
+        _ : #CON{0, #NIL}
+      }(val)
+
+    // Constructor pattern matches if value has same tag
+    #PCtr: λ&tag. λ&arg_names.
+      @purple_match_ctr(val, tag, arg_names)
+
+    _ : #CON{0, #NIL}
+  }(pattern)
+
+// Match a constructor pattern against a value
+// tag is the nick-encoded constructor name
+// arg_names is a list of name IDs (ignored, we just need count)
+@purple_match_ctr = λ&val. λ&tag. λ&arg_names.
+  // Get the actual tag of the value
+  !!&val_tag = @purple_ctr_tag_num(val);
+  λ{
+    0: #CON{0, #NIL}  // No tag (not a constructor)
+    _ : λ&u.
+      // Compare tags
+      λ{
+        0: #CON{0, #NIL}  // Tags don't match
+        _ : λ&u2.
+          // Tags match, extract arguments
+          @purple_extract_args(val, arg_names, 0)
+      }((val_tag == tag))
+  }(val_tag)
+
+// Get constructor tag as a number (not wrapped in #Sym)
+// Values computed using nick encoding: '_'=0, 'a'-'z'=1-26, 'A'-'Z'=27-52, '0'-'9'=53-62, '$'=63
+@purple_ctr_tag_num = λ&ctr.
+  λ{
+    #Lit: λ&a. 156244
+    #Sym: λ&a. 185933
+    #Var: λ&a. 196690
+    #Lam: λ&a. 155725
+    #LamR: λ&a. 9966444
+    #App: λ&a. λ&b. 111632
+    #Let: λ&a. λ&b. 155988
+    #If: λ&a. λ&b. λ&c. 2246
+    #Add: λ&a. λ&b. 110852
+    #Sub: λ&a. λ&b. 185666
+    #Mul: λ&a. λ&b. 161100
+    #Eql: λ&a. λ&b. 128076
+    #CON: λ&a. λ&b. 121448
+    #NIL: 166118
+    #Lft: λ&a. 156052
+    #Run: λ&a. λ&b. 181582
+    #Cod: λ&a. 119748
+    #Fst: λ&a. 132308
+    #Snd: λ&a. 185220
+    #EM: λ&a. 2023
+    #CLam: λ&a. 7757901
+    #Cst: λ&a. 120020
+    #Clo: λ&a. λ&b. 119567
+    #CloR: λ&a. λ&b. 7652332
+    _ : 0
+  }(ctr)
+
+// Extract arguments from a constructor value
+// Returns #CON{1, bindings_list}
+@purple_extract_args = λ&val. λ&names. λ&idx.
+  λ{
+    #NIL: #CON{1, #NIL}  // No more args to extract
+    #CON: λ&name. λ&rest.
+      !!&arg = @purple_ctr_arg_by_idx(val, idx);
+      !!&rest_result = @purple_extract_args(val, rest, (idx + 1));
+      λ{#CON: λ&ok. λ&bindings. #CON{ok, #CON{arg, bindings}}; _ : #CON{0, #NIL}}(rest_result)
+    _ : #CON{0, #NIL}
+  }(names)
+
+// Extract constructor argument by index (simpler version)
+@purple_ctr_arg_by_idx = λ&ctr. λ&idx.
+  λ{
+    #Lit: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
+    #Sym: λ&a. λ{0: #Sym{a}; _ : @pink_err(#idx)}(idx)
+    #Var: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
+    #Lam: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
+    #LamR: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
+    #App: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #Let: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #If: λ&a. λ&b. λ&c. λ{0: a; 1: b; 2: c; _ : @pink_err(#idx)}(idx)
+    #Add: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #Sub: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #Mul: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #Eql: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #CON: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #NIL: @pink_err(#idx)
+    #Lft: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
+    #Run: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#idx)}(idx)
+    #Cod: λ&a. λ{0: a; _ : @pink_err(#idx)}(idx)
+    #Cst: λ&a. λ{0: #Cst{a}; _ : @pink_err(#idx)}(idx)
+    #Clo: λ&e. λ&b. λ{0: e; 1: b; _ : @pink_err(#idx)}(idx)
+    #CloR: λ&e. λ&b. λ{0: e; 1: b; _ : @pink_err(#idx)}(idx)
+    _ : @pink_err(#carg)
+  }(ctr)
+
+// Unwrap #Cod if present (for matching on quoted expressions)
+@purple_unwrap_cod = λ&val.
+  λ{
+    #Cod: λ&inner. inner
+    _ : val
+  }(val)
+
+// Try each case until one matches
+// Returns the result of the matching case's body
+// Note: #Cod unwrapping for quoted expressions is not yet supported
+@purple_try_cases = λ&menv. λ&self. λ&val. λ&cases.
+  @purple_try_cases_inner(menv, self, val, cases)
+
+@purple_try_cases_inner = λ&menv. λ&self. λ&val. λ&cases.
+  λ{
+    #NIL: @pink_err(#nmch)  // No case matched
+    #CON: λ&case. λ&rest.
+      λ{
+        #Case: λ&pattern. λ&body.
+          !!&match_result = @purple_pattern_match(val, pattern);
+          λ{
+            #CON: λ&matched. λ&bindings.
+              λ{
+                0: @purple_try_cases_inner(menv, self, val, rest)  // Try next case
+                λ&u.
+                  // Match! Bind variables and evaluate body
+                  !!&new_env = @purple_bind_all(@purple_menv_env(menv), bindings);
+                  !!&new_menv = @purple_menv_with_env(menv, new_env);
+                  self(new_menv, body)
+              }(matched)
+            _ : @pink_err(#mat)
+          }(match_result)
+        _ : @pink_err(#case)
+      }(case)
+    _ : @pink_err(#cases)
+  }(cases)
+
+// Bind a list of values to environment
+// Bindings list is in order [first, second, ...]
+// We need first binding at index 0 (head of env)
+// So we prepend in reverse order: bind last first, then second-to-last, etc.
+@purple_bind_all = λ&env. λ&bindings.
+  @purple_bind_fold(env, bindings)
+
+// Prepend bindings in order - first binding ends up deepest
+// Then we need to reverse the final env...
+// Actually simpler: just use this and adjust de Bruijn indices in pattern matching
+@purple_bind_fold = λ&env. λ&bindings.
+  λ{
+    #NIL: env
+    #CON: λ&val.λ&rest. @purple_bind_fold(#CON{val, env}, rest)
+    _ : env
+  }(bindings)
+
 // Stage-polymorphic Purple evaluator (with handler dispatch)
 @purple_eval_poly = λ&maybe_lift. λ&self. λ&menv. λ&exp.
   !!&env = @purple_menv_env(menv);
   !!&handlers = @purple_menv_handlers(menv);
   λ{
-    #Lit: λ&n.
-      !!&h = @purple_htab_get(handlers, 0);
-      maybe_lift(@purple_call1(menv, self, h, #Cst{n}))
+    #Lit: λ&n. maybe_lift(#Cst{n})
     #Sym: λ&s. maybe_lift(#Sym{s})
     #Var: λ&n.
       !!&h = @purple_htab_get(handlers, 1);
@@ -621,6 +793,9 @@
     #Shft: λ&n. λ&e.
       !!&vn = self(menv, n);
       λ{#Cst: λ&cnt. @purple_shift_levels(menv, self, cnt, e); _ : @pink_err(#shft)}(vn)
+    #Mat: λ&expr. λ&cases.
+      !!&val = self(menv, expr);
+      @purple_try_cases(menv, self, val, cases)
     _ : @pink_err(#pexp)
   }(exp)
 

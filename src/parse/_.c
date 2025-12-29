@@ -47,6 +47,12 @@ static u32 PURPLE_NAM_EVAL; // Evaluate code expression
 static u32 PURPLE_NAM_MLVL; // Meta-level introspection
 static u32 PURPLE_NAM_SHFT; // Shift n levels up
 static u32 PURPLE_NAM_CTAG; // Constructor tag
+static u32 PURPLE_NAM_MAT;  // Match expression
+static u32 PURPLE_NAM_CASE; // Match case
+static u32 PURPLE_NAM_PCTR; // Pattern: constructor
+static u32 PURPLE_NAM_PLIT; // Pattern: literal
+static u32 PURPLE_NAM_PWLD; // Pattern: wildcard
+static u32 PURPLE_NAM_PVAR; // Pattern: variable (for nested)
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -93,6 +99,12 @@ fn void purple_names_init(void) {
   PURPLE_NAM_MLVL  = purple_nick("MLvl");
   PURPLE_NAM_SHFT  = purple_nick("Shft");
   PURPLE_NAM_CTAG  = purple_nick("CTag");
+  PURPLE_NAM_MAT   = purple_nick("Mat");
+  PURPLE_NAM_CASE  = purple_nick("Case");
+  PURPLE_NAM_PCTR  = purple_nick("PCtr");
+  PURPLE_NAM_PLIT  = purple_nick("PLit");
+  PURPLE_NAM_PWLD  = purple_nick("PWld");
+  PURPLE_NAM_PVAR  = purple_nick("PVar");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -367,6 +379,36 @@ fn Term purple_term_ctag(Term e) {
   return purple_ctr1(PURPLE_NAM_CTAG, e);
 }
 
+// Pattern matching constructors
+// #Mat{expr, cases} where cases is a list of #Case{pattern, body}
+fn Term purple_term_mat(Term expr, Term cases) {
+  return purple_ctr2(PURPLE_NAM_MAT, expr, cases);
+}
+
+fn Term purple_term_case(Term pattern, Term body) {
+  return purple_ctr2(PURPLE_NAM_CASE, pattern, body);
+}
+
+// #PCtr{tag_sym, args_list} - constructor pattern
+fn Term purple_term_pctr(Term tag, Term args) {
+  return purple_ctr2(PURPLE_NAM_PCTR, tag, args);
+}
+
+// #PLit{n} - literal pattern
+fn Term purple_term_plit(Term n) {
+  return purple_ctr1(PURPLE_NAM_PLIT, n);
+}
+
+// #PWld - wildcard pattern
+fn Term purple_term_pwld(void) {
+  return purple_ctr0(PURPLE_NAM_PWLD);
+}
+
+// #PVar{name} - variable pattern (binds a name)
+fn Term purple_term_pvar(u32 name) {
+  return purple_ctr1(PURPLE_NAM_PVAR, term_new_num(name));
+}
+
 // =============================================================================
 // Parser Functions
 // =============================================================================
@@ -607,6 +649,168 @@ fn Term purple_parse_ctag(PState *s) {
   return purple_term_ctag(e);
 }
 
+// Forward declaration
+fn Term parse_purple_form(PState *s);
+
+// Parse a pattern: (Tag args...) or _ or literal
+// Returns: #PCtr{tag, args_list} or #PWld or #PLit{n}
+fn Term purple_parse_pattern(PState *s) {
+  purple_skip(s);
+  char c = parse_peek(s);
+
+  // Wildcard: _
+  if (c == '_') {
+    parse_advance(s);
+    purple_skip(s);
+    return purple_term_pwld();
+  }
+
+  // Literal number
+  if (isdigit(c)) {
+    u32 n = purple_parse_number(s);
+    return purple_term_plit(term_new_num(n));
+  }
+
+  // Constructor pattern: (Tag arg1 arg2 ...)
+  if (c == '(') {
+    parse_advance(s);
+    purple_skip(s);
+
+    // Get constructor name
+    u32 tag_start = 0;
+    u32 tag_len = 0;
+    if (!purple_parse_symbol_token(s, &tag_start, &tag_len)) {
+      parse_error(s, "constructor name", parse_peek(s));
+    }
+
+    // Nick-encode the tag (for matching against HVM4 constructors)
+    u32 tag_nick = 0;
+    for (u32 i = 0; i < tag_len && i < 4; i++) {
+      tag_nick = ((tag_nick << 6) + nick_letter_to_b64(s->src[tag_start + i])) & EXT_MASK;
+    }
+    Term tag_sym = term_new_num(tag_nick);
+
+    // Collect argument variable names
+    u32 arg_names[16];
+    u32 arg_count = 0;
+
+    purple_skip(s);
+    while (!parse_match(s, ")")) {
+      u32 arg_start = 0;
+      u32 arg_len = 0;
+      if (!purple_parse_symbol_token(s, &arg_start, &arg_len)) {
+        parse_error(s, "pattern variable", parse_peek(s));
+      }
+      if (arg_count >= 16) {
+        fprintf(stderr, "PURPLE_ERROR: too many pattern arguments\n");
+        exit(1);
+      }
+      arg_names[arg_count++] = table_find(s->src + arg_start, arg_len);
+      purple_skip(s);
+    }
+
+    // Build args list as nested CON (in reverse for proper order)
+    Term args = purple_term_nil();
+    for (int i = (int)arg_count - 1; i >= 0; i--) {
+      args = purple_term_con(term_new_num(arg_names[i]), args);
+    }
+
+    return purple_term_pctr(tag_sym, args);
+  }
+
+  // Symbol - treat as variable pattern (like wildcard but named)
+  u32 start = 0;
+  u32 len = 0;
+  if (purple_parse_symbol_token(s, &start, &len)) {
+    u32 name = table_find(s->src + start, len);
+    return purple_term_pvar(name);
+  }
+
+  parse_error(s, "pattern", c);
+  return 0;
+}
+
+// Parse a single match case: (pattern body)
+// Binds pattern variables, parses body, unbinds
+fn Term purple_parse_match_case(PState *s) {
+  parse_consume(s, "(");
+
+  // Parse the pattern
+  Term pattern = purple_parse_pattern(s);
+
+  // Extract variable names from pattern to bind them
+  u32 bound_names[16];
+  u32 bound_count = 0;
+
+  u8 ptag = term_tag(pattern);
+  if (ptag >= C00 && ptag <= C16) {
+    u32 pnam = term_ext(pattern);
+    if (pnam == PURPLE_NAM_PCTR) {
+      // Extract args list and bind each variable
+      Term args = HEAP[term_val(pattern) + 1]; // second field
+      while (term_tag(args) >= C00 && term_tag(args) <= C16 &&
+             term_ext(args) == PURPLE_NAM_CON) {
+        u32 loc = term_val(args);
+        Term name_term = HEAP[loc];
+        if (term_tag(name_term) == NUM) {
+          u32 name = term_val(name_term);
+          if (bound_count < 16) {
+            bound_names[bound_count++] = name;
+            purple_bind_push(name);
+          }
+        }
+        args = HEAP[loc + 1];
+      }
+    } else if (pnam == PURPLE_NAM_PVAR) {
+      // Single variable pattern
+      Term name_term = HEAP[term_val(pattern)];
+      if (term_tag(name_term) == NUM) {
+        u32 name = term_val(name_term);
+        bound_names[bound_count++] = name;
+        purple_bind_push(name);
+      }
+    }
+  }
+
+  // Parse the body with variables bound
+  Term body = parse_purple_form(s);
+
+  // Unbind variables
+  purple_bind_pop(bound_count);
+
+  parse_consume(s, ")");
+
+  return purple_term_case(pattern, body);
+}
+
+// Parse: (match expr (pattern1 body1) (pattern2 body2) ...)
+fn Term purple_parse_match(PState *s) {
+  // Parse the scrutinee
+  Term expr = parse_purple_form(s);
+
+  // Collect cases into an array first
+  Term case_array[64];
+  u32 case_count = 0;
+
+  purple_skip(s);
+  while (!parse_match(s, ")")) {
+    if (case_count >= 64) {
+      fprintf(stderr, "PURPLE_ERROR: too many match cases\n");
+      exit(1);
+    }
+    case_array[case_count++] = purple_parse_match_case(s);
+    purple_skip(s);
+  }
+
+  // Build list in reverse order (from end to beginning)
+  Term cases = purple_term_nil();
+  for (int i = (int)case_count - 1; i >= 0; i--) {
+    cases = purple_term_con(case_array[i], cases);
+  }
+
+  return purple_term_mat(expr, cases);
+}
+
 fn Term purple_parse_prim2(PState *s, u32 nam) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -681,6 +885,9 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "ctr-tag")) {
       return purple_parse_ctag(s);
+    }
+    if (purple_symbol_is(s, start, len, "match")) {
+      return purple_parse_match(s);
     }
     // Pink forms
     if (purple_symbol_is(s, start, len, "lambda")) {

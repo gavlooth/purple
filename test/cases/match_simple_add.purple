@@ -1,0 +1,8 @@
+;; Simpler Add match without recursion
+(match (quote (+ 1 2))
+  ((Add a b)
+    ;; a is #Lit{1}, b is #Lit{2}
+    ;; return 999 to show we matched Add
+    999)
+  (_ 0))
+;; Expected: 999

@@ -1,0 +1,4 @@
+;; Simplest match - just wildcard
+(match (quote 42)
+  (_ 100))
+;; Expected: 100

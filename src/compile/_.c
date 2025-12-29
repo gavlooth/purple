@@ -344,6 +344,48 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Pattern matching
+    if (nam == PURPLE_NAM_MAT && ari == 2) {
+      fputs("#Mat{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_CASE && ari == 2) {
+      fputs("#Case{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_PCTR && ari == 2) {
+      fputs("#PCtr{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_PLIT && ari == 1) {
+      fputs("#PLit{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_PWLD && ari == 0) {
+      fputs("#PWld", e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_PVAR && ari == 1) {
+      fputs("#PVar{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);
     for (u32 i = 0; i < ari; i++) {

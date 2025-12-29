@@ -1,0 +1,7 @@
+;; Simpler pattern matching test - just Lit
+(let (my-eval (lambda (expr)
+  (match expr
+    ((Lit n) n)
+    (_ 999))))
+  (my-eval (quote 42)))
+;; Expected: 42

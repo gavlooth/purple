@@ -1,0 +1,6 @@
+;; Match inside lambda - simplest case
+(let (f (lambda (x)
+  (match x
+    (_ 100))))
+  (f (quote 42)))
+;; Expected: 100

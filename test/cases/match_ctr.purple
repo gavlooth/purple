@@ -1,0 +1,7 @@
+;; Constructor pattern matching test
+;; Match on quoted AST nodes
+(match (quote (+ 1 2))
+  ((Add a b) 100)
+  ((Lit n) 200)
+  (_ 0))
+;; Expected: 100 (it's an Add node)

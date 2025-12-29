@@ -1,0 +1,9 @@
+;; Pattern matching with variable bindings
+;; Extract components from a quoted expression
+(match (quote (+ 10 20))
+  ((Add a b)
+    ;; a and b are the sub-expressions #Lit{10} and #Lit{20}
+    ;; Use ctr-arg to extract the literal values
+    (+ (ctr-arg a 0) (ctr-arg b 0)))
+  (_ 0))
+;; Expected: 30 (10 + 20)

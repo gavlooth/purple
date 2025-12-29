@@ -42,6 +42,7 @@ static u32 PURPLE_NAM_CON;
 static u32 PURPLE_NAM_NIL;
 static u32 PURPLE_NAM_FST;
 static u32 PURPLE_NAM_SND;
+static u32 PURPLE_NAM_CHR;  // Character wrapper
 
 // Purple-specific constructor names
 static u32 PURPLE_NAM_EM;
@@ -104,6 +105,7 @@ fn void purple_names_init(void) {
   PURPLE_NAM_NIL  = NAM_NIL;
   PURPLE_NAM_FST  = purple_nick("Fst");
   PURPLE_NAM_SND  = purple_nick("Snd");
+  PURPLE_NAM_CHR  = NAM_CHR;  // Use HVM4's NAM_CHR constant
   // Purple names
   PURPLE_NAM_EM   = purple_nick("EM");
   PURPLE_NAM_CLAM = purple_nick("CLam");
@@ -386,6 +388,10 @@ fn Term purple_term_fst(Term p) {
 
 fn Term purple_term_snd(Term p) {
   return purple_ctr1(PURPLE_NAM_SND, p);
+}
+
+fn Term purple_term_chr(u32 codepoint) {
+  return purple_ctr1(PURPLE_NAM_CHR, term_new_num(codepoint));
 }
 
 // Purple-specific constructors
@@ -1132,12 +1138,100 @@ fn Term parse_purple_list(PState *s) {
   return purple_parse_app_rest(s, head);
 }
 
+// Parse escape sequence in string/char literal
+fn u32 purple_parse_escape(PState *s) {
+  char c = parse_peek(s);
+  parse_advance(s);
+  switch (c) {
+    case 'n':  return '\n';
+    case 't':  return '\t';
+    case 'r':  return '\r';
+    case '\\': return '\\';
+    case '"':  return '"';
+    case '0':  return '\0';
+    default:   return (u32)(u8)c;
+  }
+}
+
+// Parse string literal: "hello" -> #CON{#CHR{h}, #CON{#CHR{e}, ...#NIL}}
+fn Term purple_parse_string(PState *s) {
+  parse_advance(s);  // consume opening "
+  u32 codepoints[4096];
+  u32 count = 0;
+  while (parse_peek(s) != '"' && !parse_at_end(s)) {
+    u32 cp;
+    if (parse_peek(s) == '\\') {
+      parse_advance(s);
+      cp = purple_parse_escape(s);
+    } else {
+      cp = parse_utf8(s);
+    }
+    if (count >= 4096) {
+      fprintf(stderr, "PURPLE_ERROR: string too long\n");
+      exit(1);
+    }
+    codepoints[count++] = cp;
+  }
+  if (parse_at_end(s)) {
+    parse_error(s, "closing quote", '\0');
+  }
+  parse_advance(s);  // consume closing "
+  // Build cons list in reverse
+  Term result = purple_term_nil();
+  for (int i = (int)count - 1; i >= 0; i--) {
+    Term chr = purple_term_chr(codepoints[i]);
+    result = purple_term_con(chr, result);
+  }
+  return result;
+}
+
+// Parse character literal: #\a, #\newline, #\space, #\tab
+fn Term purple_parse_char(PState *s) {
+  parse_advance(s);  // consume #
+  if (parse_peek(s) != '\\') {
+    parse_error(s, "backslash after #", parse_peek(s));
+  }
+  parse_advance(s);  // consume backslash
+  // Check for named characters
+  if (parse_starts_with(s, "newline")) {
+    s->pos += 7;
+    return purple_term_chr('\n');
+  }
+  if (parse_starts_with(s, "space")) {
+    s->pos += 5;
+    return purple_term_chr(' ');
+  }
+  if (parse_starts_with(s, "tab")) {
+    s->pos += 3;
+    return purple_term_chr('\t');
+  }
+  if (parse_starts_with(s, "return")) {
+    s->pos += 6;
+    return purple_term_chr('\r');
+  }
+  if (parse_starts_with(s, "null")) {
+    s->pos += 4;
+    return purple_term_chr('\0');
+  }
+  // Single character
+  u32 cp = parse_utf8(s);
+  return purple_term_chr(cp);
+}
+
 fn Term parse_purple_form(PState *s) {
   purple_skip(s);
   if (parse_at_end(s)) {
     parse_error(s, "form", '\0');
   }
   char c = parse_peek(s);
+  // String literal: "hello"
+  if (c == '"') {
+    return purple_parse_string(s);
+  }
+  // Character literal: #\a, #\newline, etc.
+  if (c == '#' && s->pos + 1 < s->len && s->src[s->pos + 1] == '\\') {
+    return purple_parse_char(s);
+  }
   // Quoted symbol: 'foo -> #Sym{nick_id}
   // Uses nick encoding so symbols can be matched against HVM4 constructors
   if (c == '\'') {

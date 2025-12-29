@@ -30,7 +30,8 @@ for test in "$PURPLE_DIR"/test/cases/*.purple; do
   fi
 
   result=$("$HVM4" /tmp/purple_test.hvm4 -s 2>&1 | head -1)
-  if [[ "$result" =~ ^[0-9]+$ ]] || [[ "$result" =~ ^#[A-Za-z] ]]; then
+  # Accept: numbers, constructors (#...), strings ("..."), chars ('...'), lists ([...])
+  if [[ "$result" =~ ^[0-9]+$ ]] || [[ "$result" =~ ^#[A-Za-z] ]] || [[ "$result" =~ ^\".* ]] || [[ "$result" =~ ^\'.\' ]] || [[ "$result" =~ ^\[.* ]]; then
     echo "PASS: $name -> $result"
     PASS=$((PASS + 1))
   else

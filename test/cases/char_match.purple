@@ -1,0 +1,4 @@
+; Pattern matching on characters (use uppercase CHR)
+(match #\x
+  ((CHR c) c)
+  (_ 0))

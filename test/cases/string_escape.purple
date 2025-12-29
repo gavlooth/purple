@@ -1,0 +1,2 @@
+; String with escape sequences
+"a\nb"

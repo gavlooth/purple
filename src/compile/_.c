@@ -338,6 +338,14 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Character (use HVM4's built-in #CHR)
+    if (nam == PURPLE_NAM_CHR && ari == 1) {
+      fputs("#CHR{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
     // Purple-specific constructors
     if (nam == PURPLE_NAM_EM && ari == 1) {
       fputs("#EM{", e->out);

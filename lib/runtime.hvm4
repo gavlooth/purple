@@ -19,6 +19,7 @@
   λ{
     #Cst: λ&n. #Lit{n}
     #Sym: λ&s. #Sym{s}
+    #CHR: λ&c. #CHR{c}
     #CON: λ&a. λ&b. #CON{@pink_reify(a), @pink_reify(b)}
     #NIL: #NIL
     #Cod: λ&e. #Cod{e}
@@ -123,6 +124,7 @@
         _ : λ&u. maybe_lift(#CON{va, vb})
       }(va)
     #NIL: maybe_lift(#NIL)
+    #CHR: λ&c. maybe_lift(#CHR{c})
     #Fst: λ&p.
       !!&vp = self(env, p);
       λ{
@@ -147,6 +149,7 @@
   λ{
     #Cst: λ&n. n
     #Sym: λ&s. #Sym{s}
+    #CHR: λ&c. #CHR{c}
     #CON: λ&a. λ&b. #CON{@pink_unwrap(a), @pink_unwrap(b)}
     #NIL: #NIL
     #Cod: λ&e. #Cod{e}
@@ -423,6 +426,7 @@
         #Sub: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
         #Mul: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
         #Eql: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
+        #CHR: λ&c. λ{0: c; _ : @pink_err(#carg)}(n)
         #CON: λ&a. λ&b. λ{0: a; 1: b; _ : @pink_err(#carg)}(n)
         #NIL: @pink_err(#carg)
         #Lft: λ&a. λ{0: a; _ : @pink_err(#carg)}(n)
@@ -454,6 +458,7 @@
     #Sub: λ&a. λ&b. #Sym{185666}
     #Mul: λ&a. λ&b. #Sym{161100}
     #Eql: λ&a. λ&b. #Sym{128076}
+    #CHR: λ&a. #Sym{121004}
     #CON: λ&a. λ&b. #Sym{121448}
     #NIL: #Sym{166118}
     #Lft: λ&a. #Sym{156052}
@@ -536,6 +541,7 @@
     #Sub: λ&a. λ&b. @purple_match_tag_extract(185666, tag, #CON{a, #CON{b, #NIL}}, arg_names)
     #Mul: λ&a. λ&b. @purple_match_tag_extract(161100, tag, #CON{a, #CON{b, #NIL}}, arg_names)
     #Eql: λ&a. λ&b. @purple_match_tag_extract(128076, tag, #CON{a, #CON{b, #NIL}}, arg_names)
+    #CHR: λ&c. @purple_match_tag_extract(121004, tag, #CON{#Cst{c}, #NIL}, arg_names)
     #CON: λ&a. λ&b. @purple_match_tag_extract(121448, tag, #CON{a, #CON{b, #NIL}}, arg_names)
     #NIL: @purple_match_tag_extract(166118, tag, #NIL, arg_names)
     #Lft: λ&a. @purple_match_tag_extract(156052, tag, #CON{a, #NIL}, arg_names)
@@ -770,6 +776,7 @@
           _ : λ&u. maybe_lift(#CON{va, vb})
         }(va)
       #NIL: maybe_lift(#NIL)
+      #CHR: λ&c. maybe_lift(#CHR{c})
       #Fst: λ&p.
         !!&vp = self(#MEnv{env, handlers, parent, level}, p);
         λ{
@@ -836,6 +843,7 @@
   λ{
     #Cst: λ&n. n
     #Sym: λ&s. #Sym{s}
+    #CHR: λ&c. #CHR{c}
     #CON: λ&a. λ&b. #CON{@purple_unwrap(a), @purple_unwrap(b)}
     #NIL: #NIL
     #Cod: λ&e. #Cod{e}

@@ -1,0 +1,2 @@
+; Named character literals
+(cons #\newline (cons #\space nil))

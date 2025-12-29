@@ -608,7 +608,9 @@
   !!&env = @purple_menv_env(menv);
   !!&handlers = @purple_menv_handlers(menv);
   λ{
-    #Lit: λ&n. maybe_lift(#Cst{n})
+    #Lit: λ&n.
+      !!&h = @purple_htab_get(handlers, 0);
+      maybe_lift(@purple_call1(menv, self, h, #Cst{n}))
     #Sym: λ&s. maybe_lift(#Sym{s})
     #Var: λ&n.
       !!&h = @purple_htab_get(handlers, 1);

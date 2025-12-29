@@ -241,6 +241,38 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    if (nam == PURPLE_NAM_LT && ari == 2) {
+      fputs("#Lt{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_GT && ari == 2) {
+      fputs("#Gt{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_LE && ari == 2) {
+      fputs("#Le{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_GE && ari == 2) {
+      fputs("#Ge{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
 
     // Pairs
     if (nam == PURPLE_NAM_CON && ari == 2) {

@@ -444,19 +444,18 @@
   ; _ : @pink_err(#htab)}(tab)
 
 // Symbol to handler index mapping
-// Maps handler name symbols (nick encoded) to indices: lit=0, var=1, lam=2, app=3, if=4, lft=5, run=6, em=7, clam=8
-// Nick encodings: lit=49748, var=90194, lam=49229, app=5136, if=582, lft=49556, run=75086, em=333, clam=835661, add=4356
+// Maps handler name symbols to indices: lit=0, var=1, lam=2, app=3, if=4, lft=5, run=6, em=7, clam=8
 @purple_sym_to_idx = λ&sym.
   λ{
-    49748: 0   // lit
-    90194: 1   // var
-    49229: 2   // lam
-    5136: 3    // app
-    582: 4     // if
-    49556: 5   // lft
-    75086: 6   // run
-    333: 7     // em
-    835661: 8  // clam
+    #lit: 0
+    #var: 1
+    #lam: 2
+    #app: 3
+    #if: 4
+    #lft: 5
+    #run: 6
+    #em: 7
+    #clam: 8
     _ : @pink_err(#symi)
   }(sym)
 
@@ -517,16 +516,6 @@
       _ : @pink_err(#h1)
     }(handler)
   ; _ : @pink_err(#menv)}(menv)
-
-// Call default handler by symbol name
-// Used for handler delegation: (default-handler 'add arg)
-// Gets the default handler from @purple_default_handlers and calls it
-@purple_call_default_handler = λm. λef. λn. λa.
-  !!&menv = m; %eval_fn = ef; !!&name = n; %arg = a;
-  λ{#Sym: λ&s.
-    !!&handler = @purple_htab_get_by_sym(@purple_default_handlers)(s);
-    @purple_call1(menv)(eval_fn)(handler)(arg)
-  ; _ : @pink_err(#defh)}(name)
 
 // Wrap a Purple closure for use as a handler
 @purple_wrap_handler = λ&clo.
@@ -640,18 +629,6 @@
 
     // Or-pattern: try each alternative until one matches
     #POr: λ&alternatives. @purple_match_or(val)(alternatives)
-
-    // As-pattern: bind name to whole value and also match subpattern
-    #PAs: λ&name. λ&subpattern.
-      !!&sub_result = @purple_pattern_match(val)(subpattern);
-      λ{
-        #CON: λ&matched. λ&sub_bindings.
-          λ{
-            0: #CON{0, #NIL}  // Subpattern didn't match
-            λ&m. #CON{1, #CON{val, sub_bindings}}  // Prepend val to bindings
-          }(matched)
-        _ : #CON{0, #NIL}
-      }(sub_result)
 
     _ : #CON{0, #NIL}
   }(pattern)
@@ -909,8 +886,7 @@
   λ{
     // If first result is FFI, we need to chain: #Do{#FFI{...}, rest}
     // This allows the C driver to execute FFI calls in sequence
-    // Preserve the current menv so the continuation evaluates in the right context
-    #FFI: λ&name. λ&args. #Do{#FFI{name, args}, #WMnv{menv, rest}}
+    #FFI: λ&name. λ&args. #Do{#FFI{name, args}, rest}
     // For non-FFI values, just discard and continue
     _ : λ&u. eval_fn(menv)(rest)
   }(vf)
@@ -1131,9 +1107,7 @@
         @purple_ctr_tag(ve)
       #Eval: λ&e.
         !!&ve = @purple_eval(#MEnv{env, handlers, parent, level})(e);
-        // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
-        // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
-        λ{#Cod: λ&code. @purple_eval(#MEnv{env, handlers, parent, level})(code); λ&u. @purple_eval(#MEnv{env, handlers, parent, level})(ve)}(ve)
+        λ{#Cod: λ&code. @purple_eval(#MEnv{env, handlers, parent, level})(code); _ : @pink_err(#eval)}(ve)
       #MLvl: #Cst{level}
       #Shft: λ&n. λ&e.
         !!&vn = @purple_eval(#MEnv{env, handlers, parent, level})(n);
@@ -1161,43 +1135,6 @@
         // Evaluate first, discard result, evaluate rest
         !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(first);
         @purple_do_continue(#MEnv{env, handlers, parent, level})(@purple_eval)(vf)(rest)
-      // Default handler delegation: (default-handler 'name arg)
-      // Calls the default handler for a given handler name symbol
-      #DefH: λ&name. λ&arg.
-        !!&vname = @purple_eval(#MEnv{env, handlers, parent, level})(name);
-        !!&varg = @purple_eval(#MEnv{env, handlers, parent, level})(arg);
-        // Get default handler by name and call it
-        @purple_call_default_handler(#MEnv{env, handlers, parent, level})(@purple_eval)(vname)(varg)
-      // Error: (error msg) -> raises an error with the evaluated message
-      #ErrR: λ&msg.
-        !!&vmsg = @purple_eval(#MEnv{env, handlers, parent, level})(msg);
-        #Err{vmsg}
-      // Try: (try expr handler) -> catch errors with handler
-      #Try: λ&expr. λ&handler.
-        !!&vexpr = @purple_eval(#MEnv{env, handlers, parent, level})(expr);
-        !!&vhandler = @purple_eval(#MEnv{env, handlers, parent, level})(handler);
-        λ{
-          #Err: λ&msg. @purple_apply_menv(#MEnv{env, handlers, parent, level})(@purple_eval)(vhandler)(msg)
-          λ&u. vexpr
-        }(vexpr)
-      // Assert: (assert cond msg) -> raise error if cond is false
-      #Asrt: λ&cond. λ&msg.
-        !!&vcond = @purple_eval(#MEnv{env, handlers, parent, level})(cond);
-        λ{
-          #Cst: λ&n. λ{0: !!&vmsg = @purple_eval(#MEnv{env, handlers, parent, level})(msg); #Err{vmsg}; λ&u. #Cst{1}}(n)
-          λ&u. @pink_err(#asrt)
-        }(vcond)
-      // Trace: (trace expr) -> evaluate and return #Traced{value}
-      #Trce: λ&expr.
-        !!&vexpr = @purple_eval(#MEnv{env, handlers, parent, level})(expr);
-        #Traced{vexpr}
-      // Reify-env: return current environment as a value
-      #REnv: env
-      // Gensym: generate a unique symbol from index n
-      // Returns #Sym{10000000 + n} to create symbols in a reserved range
-      #GSym: λ&n.
-        !!&vn = @purple_eval(#MEnv{env, handlers, parent, level})(n);
-        λ{#Cst: λ&idx. #Sym{(10000000 + idx)}; λ&u. @pink_err(#gsym)}(vn)
       // Quasiquote: process expression, evaluating unquotes
       #QQ: λ&inner.
         @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_eval)(inner)
@@ -1236,18 +1173,6 @@
       #Rev: λ&lst.
         !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
         @purple_list_reverse(vlst)
-      // Higher-order function utilities
-      #Comp: λ&f. λ&g.
-        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
-        !!&vg = @purple_eval(#MEnv{env, handlers, parent, level})(g);
-        @purple_compose(#MEnv{env, handlers, parent, level})(vf)(vg)
-      #Flip: λ&f.
-        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
-        @purple_flip(#MEnv{env, handlers, parent, level})(vf)
-      #Appl: λ&f. λ&args.
-        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
-        !!&vargs = @purple_eval(#MEnv{env, handlers, parent, level})(args);
-        @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -1467,8 +1392,7 @@
         @purple_ctr_tag(ve)
       #Eval: λ&e.
         !!&ve = @purple_evalc(#MEnv{env, handlers, parent, level})(e);
-        // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
-        λ{#Cod: λ&code. @purple_evalc(#MEnv{env, handlers, parent, level})(code); _ : @purple_evalc(#MEnv{env, handlers, parent, level})(ve)}(ve)
+        λ{#Cod: λ&code. @purple_evalc(#MEnv{env, handlers, parent, level})(code); _ : @pink_err(#eval)}(ve)
       #MLvl: @pink_lift(#Cst{level})
       #Shft: λ&n. λ&e.
         !!&vn = @purple_evalc(#MEnv{env, handlers, parent, level})(n);
@@ -1490,40 +1414,6 @@
       #Do: λ&first. λ&rest.
         !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(first);
         @purple_do_continue(#MEnv{env, handlers, parent, level})(@purple_evalc)(vf)(rest)
-      // Default handler delegation (compile mode)
-      #DefH: λ&name. λ&arg.
-        !!&vname = @purple_evalc(#MEnv{env, handlers, parent, level})(name);
-        !!&varg = @purple_evalc(#MEnv{env, handlers, parent, level})(arg);
-        @purple_call_default_handler(#MEnv{env, handlers, parent, level})(@purple_evalc)(vname)(varg)
-      // Error: raise an error with a message
-      #ErrR: λ&msg.
-        !!&vmsg = @purple_evalc(#MEnv{env, handlers, parent, level})(msg);
-        #Err{vmsg}
-      // Try: (try expr handler) -> catch errors with handler (compile mode)
-      #Try: λ&expr. λ&handler.
-        !!&vexpr = @purple_evalc(#MEnv{env, handlers, parent, level})(expr);
-        !!&vhandler = @purple_evalc(#MEnv{env, handlers, parent, level})(handler);
-        λ{
-          #Err: λ&msg. @purple_apply_menv(#MEnv{env, handlers, parent, level})(@purple_evalc)(vhandler)(msg)
-          λ&u. vexpr
-        }(vexpr)
-      // Assert: (assert cond msg) -> raise error if cond is false (compile mode)
-      #Asrt: λ&cond. λ&msg.
-        !!&vcond = @purple_evalc(#MEnv{env, handlers, parent, level})(cond);
-        λ{
-          #Cst: λ&n. λ{0: !!&vmsg = @purple_evalc(#MEnv{env, handlers, parent, level})(msg); #Err{vmsg}; λ&u. @pink_lift(#Cst{1})}(n)
-          λ&u. @pink_err(#asrt)
-        }(vcond)
-      // Trace: (trace expr) -> evaluate and return #Traced{value} (compile mode)
-      #Trce: λ&expr.
-        !!&vexpr = @purple_evalc(#MEnv{env, handlers, parent, level})(expr);
-        #Traced{vexpr}
-      // Reify-env: return current environment (compile mode)
-      #REnv: @pink_lift(env)
-      // Gensym: generate unique symbol (compile mode)
-      #GSym: λ&n.
-        !!&vn = @purple_evalc(#MEnv{env, handlers, parent, level})(n);
-        λ{#Cst: λ&idx. @pink_lift(#Sym{(10000000 + idx)}); λ&u. @pink_err(#gsym)}(vn)
       // Quasiquote: process expression, evaluating unquotes in compile mode
       #QQ: λ&inner.
         @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_evalc)(inner)
@@ -1562,18 +1452,6 @@
       #Rev: λ&lst.
         !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
         @purple_list_reverse(vlst)
-      // Higher-order function utilities
-      #Comp: λ&f. λ&g.
-        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
-        !!&vg = @purple_evalc(#MEnv{env, handlers, parent, level})(g);
-        @purple_compose(#MEnv{env, handlers, parent, level})(vf)(vg)
-      #Flip: λ&f.
-        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
-        @purple_flip(#MEnv{env, handlers, parent, level})(vf)
-      #Appl: λ&f. λ&args.
-        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
-        !!&vargs = @purple_evalc(#MEnv{env, handlers, parent, level})(args);
-        @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -1589,11 +1467,8 @@
   !!&m = menv; !!&evf = eval_fn; %e = exp;
   λ{
     // Unquote: evaluate and splice result
-    // If result is #Cod{e}, unwrap to e (for macro expansion)
     #UQ: λ&inner.
-      !!&v = evf(m)(inner);
-      // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
-      λ{#Cod: λ&code. code; λ&u. v}(v)
+      evf(m)(inner)
     // Unquote-splicing outside list context is an error
     #UQS: λ&inner.
       @pink_err(#uqs)
@@ -1766,44 +1641,6 @@
     _ : @pink_err(#rev)
   }(l)
 
-// =============================================================================
-// Higher-Order Function Utilities
-// =============================================================================
-
-// Compose: (compose f g) returns a closure that when applied to x gives f(g(x))
-@purple_compose = λmenv. λ&vf. λ&vg.
-  // Return a closure that captures f and g
-  // Env: #CON{f, #CON{g, #NIL}}
-  // When applied to x: env becomes #CON{x, #CON{f, #CON{g, #NIL}}}
-  // #Var{0} = x, #Var{1} = f, #Var{2} = g
-  // Body: f(g(x)) = #App{#Var{1}, #App{#Var{2}, #Var{0}}}
-  #Clo{#CON{vf, #CON{vg, #NIL}}, #App{#Var{1}, #App{#Var{2}, #Var{0}}}}
-
-// Flip: (flip f) returns a function with swapped argument order
-// (flip f x y) = (f y x)
-@purple_flip = λmenv. λ&vf.
-  // Return a closure that captures f
-  // Env: #CON{f, #NIL}
-  // When applied to x: env becomes #CON{x, #CON{f, #NIL}}
-  // #Var{0} = x, #Var{1} = f
-  // Body is a lambda: λy. (f y x)
-  // When that lambda is applied to y: #CON{y, #CON{x, #CON{f, #NIL}}}
-  // #Var{0} = y, #Var{1} = x, #Var{2} = f
-  // Inner body: ((f y) x) = #App{#App{#Var{2}, #Var{0}}, #Var{1}}
-  #Clo{#CON{vf, #NIL}, #Lam{#App{#App{#Var{2}, #Var{0}}, #Var{1}}}}
-
-// Apply: apply a function to a list of arguments
-// (apply f '(a b c)) = (((f a) b) c)
-@purple_apply_to_list = λmenv. λ&func. λargs.
-  !!&m = menv; %f = func; %l = args;
-  λ{
-    #NIL: f
-    #CON: λ&h. λ&t.
-      !!&applied = @purple_apply_menv(m)(@purple_eval)(f)(h);
-      @purple_apply_to_list(m)(applied)(t)
-    _ : @pink_err(#appl)
-  }(l)
-
 @purple_unwrap = λ&v.
   λ{
     #Cst: λ&n. n
@@ -1817,14 +1654,6 @@
     #MEnv: λ&e.λ&h.λ&p.λ&l. #MEnv{e, h, p, l}
     #FFI: λ&name. λ&args. #FFI{name, @purple_unwrap_list(args)}
     #Do: λ&first. λ&rest. #Do{@purple_unwrap(first), @purple_unwrap(rest)}
-    #WMnv: λ&m. λ&b. #WMnv{@purple_unwrap(m), @purple_unwrap(b)}
-    #DefH: λ&n. λ&a. #DefH{@purple_unwrap(n), @purple_unwrap(a)}
-    #ErrR: λ&m. #ErrR{@purple_unwrap(m)}
-    #Err: λ&m. #Err{@purple_unwrap(m)}
-    #Try: λ&e. λ&h. #Try{@purple_unwrap(e), @purple_unwrap(h)}
-    #Asrt: λ&c. λ&m. #Asrt{@purple_unwrap(c), @purple_unwrap(m)}
-    #Trce: λ&e. #Trce{@purple_unwrap(e)}
-    #Traced: λ&v. #Traced{@purple_unwrap(v)}
     // AST nodes that may appear in unevaluated code (for FFI continuations)
     #Lit: λ&n. #Lit{n}
     #Var: λ&n. #Var{n}
@@ -1844,3 +1673,5 @@
     #CON: λ&h. λ&t. #CON{@purple_unwrap(h), @purple_unwrap_list(t)}
     _ : lst
   }(lst)
+
+@main = @purple_unwrap(@purple_eval(@purple_menv_new(0)(#NIL)(#NIL))(#Len{#NIL}))

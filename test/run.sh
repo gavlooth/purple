@@ -21,6 +21,22 @@ FAIL=0
 
 for test in "$PURPLE_DIR"/test/cases/*.purple; do
   name=$(basename "$test" .purple)
+  expected_file="$PURPLE_DIR/test/cases/$name.expected"
+  if [ -f "$expected_file" ]; then
+    expected_line=$(grep -m 1 -v '^[[:space:]]*$' "$expected_file")
+    expected_line="${expected_line%$'\r'}"
+    if [[ "$expected_line" == ERROR:* ]]; then
+      "$PURPLE" "$test" > /tmp/purple_test.hvm4 2>/tmp/purple_test.err
+      if [ $? -ne 0 ]; then
+        echo "PASS: $name -> expected error"
+        PASS=$((PASS + 1))
+      else
+        echo "FAIL: $name -> expected error, got success"
+        FAIL=$((FAIL + 1))
+      fi
+      continue
+    fi
+  fi
   rm -f /tmp/purple_test.hvm4
   "$PURPLE" "$test" > /tmp/purple_test.hvm4 2>/tmp/purple_test.err
   if [ $? -ne 0 ]; then

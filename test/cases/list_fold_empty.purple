@@ -1,0 +1,2 @@
+; Test fold on empty list - should return initial value
+(fold (lambda (x) (lambda (acc) (+ x acc))) 42 (nil))

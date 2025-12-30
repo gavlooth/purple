@@ -1,0 +1,4 @@
+; Nested constructor pattern (runtime match path via wildcard)
+(match (cons (cons 1 2) 3)
+  ((CON (CON x y) z) (+ x (+ y z)))
+  (_ 0))

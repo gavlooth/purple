@@ -210,6 +210,36 @@ fn int purple_pattern_needs_raw_wrap(u32 tag_nick) {
   return 0;
 }
 
+// Native match only supports constructor arguments that are plain variables.
+fn int purple_pattern_arg_is_var(Term pat) {
+  u8 tag = term_tag(pat);
+  if (tag >= C00 && tag <= C16) {
+    return term_ext(pat) == PURPLEC_NAM_PVAR;
+  }
+  return 0;
+}
+
+fn int purple_pattern_args_need_runtime(Term args) {
+  Term curr = args;
+  while (1) {
+    u8 tag = term_tag(curr);
+    if (tag >= C00 && tag <= C16) {
+      u32 nam = term_ext(curr);
+      if (nam == PURPLEC_NAM_NIL) break;
+      if (nam == PURPLEC_NAM_CON && purple_ctr_arity(curr) == 2) {
+        Term pat = purple_ctr_arg(curr, 0);
+        if (!purple_pattern_arg_is_var(pat)) {
+          return 1;
+        }
+        curr = purple_ctr_arg(curr, 1);
+        continue;
+      }
+    }
+    break;
+  }
+  return 0;
+}
+
 // Emit native HVM4 pattern match case for a constructor pattern
 // Pattern: #PCtr{tag_nick, args_list}
 // Generates: #TAG: λ&a. λ&b. #CON{body, #CON{a, #CON{b, #NIL}}}
@@ -253,7 +283,11 @@ fn void purple_emit_native_ctr_case(PurpleEmit *e, Term pattern, Term body) {
 
   // Count args and collect variable names
   u32 n_args = purple_count_pattern_args(args);
-  const char *var_names[16];  // Max 16 args
+  if (n_args > 64) {
+    fprintf(stderr, "PURPLE_ERROR: too many pattern arguments in compiler\n");
+    exit(1);
+  }
+  const char *var_names[64];  // Max 64 args
 
   // Emit lambdas and save variable names
   for (u32 i = 0; i < n_args; i++) {
@@ -344,6 +378,8 @@ fn int purple_match_needs_runtime(Term cases) {
                 u32 anam = term_ext(args);
                 if (anam == PURPLEC_NAM_CON) has_ctr_with_args = 1;
               }
+              // Native match can't handle nested patterns or wildcards in args
+              if (purple_pattern_args_need_runtime(args)) return 1;
               // Constructor patterns with raw values need runtime
               Term tag_term = purple_ctr_arg(pattern, 0);
               if (term_tag(tag_term) == NUM) {

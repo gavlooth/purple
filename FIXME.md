@@ -6,37 +6,7 @@ This document tracks known bugs and issues in the Purple codebase.
 
 ## Critical Issues
 
-### 1. Missing Compiler Cases for Parsed Features
-
-**File:** `src/compile/_.c`
-
-19 features are parsed and have runtime support but lack compiler emission handlers:
-
-| Feature | Parser | Compiler | Runtime |
-|---------|--------|----------|---------|
-| Quasiquote (`QQ`) | Line 173 | Missing | Line 1201 |
-| Unquote (`UQ`) | Line 174 | Missing | Line 1205 |
-| Unquote-splicing (`UQS`) | Line 175 | Missing | Line 1208 |
-| Map | Line 76 | Missing | Line 1210 |
-| Filter | Line 77 | Missing | Line 1214 |
-| Fold | Line 78 | Missing | Line 1218 |
-| Foldl | Line 79 | Missing | Line 1222 |
-| Length | Line 80 | Missing | Line 1228 |
-| Append | Line 81 | Missing | Line 1231 |
-| Reverse | Line 82 | Missing | Line 1234 |
-| Compose | Line 85 | Missing | Line 1239 |
-| Flip | Line 86 | Missing | Line 1243 |
-| Apply | Line 87 | Missing | Line 1246 |
-| Defmacro | Line 90 | Missing | None |
-| Macroexpand | Line 91 | Missing | None |
-
-**Impact:** Programs using these features compile to invalid HVM4 code.
-
-**Fix:** Add cases to `purple_compile_emit_term()` switch statement for each missing feature.
-
----
-
-### 2. Nick Encoding Collision Risk
+### 1. Nick Encoding Collision Risk
 
 **File:** `lib/runtime.hvm4`
 
@@ -55,7 +25,7 @@ Examples of current abbreviations:
 
 ## Medium Issues
 
-### 3. Handler Table Limited to 9 Entries
+### 2. Handler Table Limited to 9 Entries
 
 **File:** `lib/runtime.hvm4:427-437`
 
@@ -72,40 +42,7 @@ Missing handlers for: add, sub, mul, div, mod, and, or, not, lt, gt, le, ge, eql
 
 ---
 
-### 4. Off-by-One in List Pattern NIL Constructor
-
-**File:** `src/parse/_.c:1293-1330`
-
-```c
-result = purple_term_pctr(term_new_num(166118), purple_term_nil()); // NIL pattern
-```
-
-NIL is a 0-arity constructor but pattern is created with an argument list.
-
-**Impact:** List patterns like `(list a b)` may fail to match empty list terminators.
-
-**Fix:** Create NIL pattern without arguments: `purple_term_pctr(term_new_num(166118), purple_term_nil())` should be just the tag with empty args.
-
----
-
-### 5. Include Directive Bounds Check Off-by-One
-
-**File:** `src/parse/_.c:2078-2086`
-
-```c
-if (pos + 10 < len &&
-    src[pos] == '(' &&
-    strncmp(src + pos + 1, "include", 7) == 0 &&
-    (src[pos + 8] == ' ' || src[pos + 8] == '\t' || src[pos + 8] == '\n'))
-```
-
-Uses `pos + 10 < len` but only needs to access `src[pos + 8]`.
-
-**Fix:** Change to `pos + 9 <= len` or `pos + 8 < len`.
-
----
-
-### 6. Fixed Array Bounds with Hard Exit
+### 3. Fixed Array Bounds with Hard Exit
 
 **File:** `src/parse/_.c`
 
@@ -126,21 +63,7 @@ Uses `pos + 10 < len` but only needs to access `src[pos + 8]`.
 
 ## Minor Issues
 
-### 7. Compiler Uses Wrong Name Prefix for Patterns
-
-**File:** `src/compile/_.c:890-902`
-
-```c
-if (nam == PURPLEC_NAM_POR && ari == 1) {  // Should be PURPLE_NAM_POR
-```
-
-Uses `PURPLEC_NAM_*` instead of `PURPLE_NAM_*` for pattern constructors.
-
-**Fix:** Use consistent `PURPLE_NAM_*` naming from parser.
-
----
-
-### 8. Or-Pattern Only Binds First Alternative's Variables
+### 4. Or-Pattern Only Binds First Alternative's Variables
 
 **File:** `src/parse/_.c:1433-1438`
 
@@ -157,12 +80,10 @@ case PURPLE_NAM_POR:
 
 ---
 
-### 9. Test Coverage Gaps
+### 5. Test Coverage Gaps
 
 **Directory:** `test/cases/`
 
-- 64 of 134 test files lack `.expected` output verification
-- No tests for macro system (`defmacro`, `macroexpand`)
 - No tests for or-patterns with divergent bindings
 - Limited edge case testing for list operations
 
@@ -170,23 +91,29 @@ case PURPLE_NAM_POR:
 
 ---
 
-### 10. Symbol Term Uses Table Index Instead of Nick
+## Resolved Issues
+
+### ~~Symbol Term Uses Table Index Instead of Nick~~ (FIXED)
 
 **File:** `src/parse/_.c:677-685`
 
-```c
-fn Term purple_symbol_term(PState *s, u32 start, u32 len) {
-  u32 sym_id = table_find(s->src + start, len);  // Returns table index
-  ...
-  return purple_term_sym(sym_id);  // But purple_term_sym expects nick-encoded value
-}
-```
+Previously `purple_symbol_term` returned table indices for unbound symbols instead of nick-encoded values.
 
-Comment says "nick-encoded ID" but `table_find` returns a table index.
+**Status:** Fixed - now computes nick encoding from source string.
 
-**Impact:** Unbound symbols get table indices instead of nick values, causing runtime mismatches.
+---
 
-**Fix:** Use nick encoding for unbound symbols: compute nick from source string.
+## False Positives (Removed)
+
+The following issues from the original analysis were determined to be false positives:
+
+1. **Missing Compiler Cases**: All 19 features (QQ, UQ, UQS, Map, Filter, etc.) ARE present in `src/compile/_.c` lines 905-1022.
+
+2. **Off-by-One in List Pattern NIL Constructor**: The `purple_term_pctr(tag, purple_term_nil())` pattern is correct - `purple_term_nil()` represents an empty argument list.
+
+3. **Include Directive Bounds Check**: The `pos + 10 < len` check is conservative but safe (provides buffer for future parsing).
+
+4. **Compiler Name Prefix**: `PURPLEC_NAM_*` vs `PURPLE_NAM_*` is intentional modularity - both compute identical nick values from the same strings.
 
 ---
 
@@ -194,9 +121,10 @@ Comment says "nick-encoded ID" but `table_find` returns a table index.
 
 | Severity | Count | Status |
 |----------|-------|--------|
-| Critical | 2 | Open |
-| Medium | 4 | Open |
-| Minor | 4 | Open |
+| Critical | 1 | Open |
+| Medium | 2 | Open |
+| Minor | 2 | Open |
+| Resolved | 1 | Fixed |
 
 ---
 

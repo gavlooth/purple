@@ -674,15 +674,21 @@ fn Term purple_term_do(Term first, Term rest) {
 // =============================================================================
 
 fn Term purple_symbol_term(PState *s, u32 start, u32 len) {
-  u32 sym_id = table_find(s->src + start, len);
+  u32 table_id = table_find(s->src + start, len);
   u32 idx    = 0;
-  if (purple_bind_lookup(sym_id, &idx)) {
+  if (purple_bind_lookup(table_id, &idx)) {
     return purple_term_var(idx);
   }
   if (purple_symbol_is(s, start, len, "nil")) {
     return purple_term_nil();
   }
-  return purple_term_sym(sym_id);
+  // For unbound symbols, use nick encoding (like quoted symbols)
+  // Nick-encode the symbol (max 4 chars)
+  u32 nick = 0;
+  for (u32 i = 0; i < len && i < 4; i++) {
+    nick = ((nick << 6) + nick_letter_to_b64(s->src[start + i])) & EXT_MASK;
+  }
+  return purple_term_sym(nick);
 }
 
 fn Term parse_purple_form(PState *s);
@@ -1399,6 +1405,55 @@ fn Term purple_parse_pattern(PState *s) {
 
 // Recursively extract and bind variable names from a pattern
 // Returns the count of bound variables
+fn void purple_collect_pattern_vars(Term pattern, u32 *vars, u32 *count, u32 max) {
+  u8 ptag = term_tag(pattern);
+  if (!(ptag >= C00 && ptag <= C16)) {
+    return;
+  }
+
+  u32 pnam = term_ext(pattern);
+
+  if (pnam == PURPLE_NAM_PVAR) {
+    Term name_term = HEAP[term_val(pattern)];
+    if (term_tag(name_term) == NUM) {
+      if (*count >= max) {
+        fprintf(stderr, "PURPLE_ERROR: too many pattern variables\n");
+        exit(1);
+      }
+      vars[(*count)++] = term_val(name_term);
+    }
+  } else if (pnam == PURPLE_NAM_PCTR) {
+    Term args = HEAP[term_val(pattern) + 1];
+    while (term_tag(args) >= C00 && term_tag(args) <= C16 &&
+           term_ext(args) == PURPLE_NAM_CON) {
+      u32 loc = term_val(args);
+      Term sub_pattern = HEAP[loc];
+      purple_collect_pattern_vars(sub_pattern, vars, count, max);
+      args = HEAP[loc + 1];
+    }
+  } else if (pnam == PURPLE_NAM_POR) {
+    Term alts = HEAP[term_val(pattern)];
+    if (term_tag(alts) >= C00 && term_tag(alts) <= C16 &&
+        term_ext(alts) == PURPLE_NAM_CON) {
+      u32 loc = term_val(alts);
+      Term first_pattern = HEAP[loc];
+      purple_collect_pattern_vars(first_pattern, vars, count, max);
+    }
+  } else if (pnam == PURPLE_NAM_PAS) {
+    u32 loc = term_val(pattern);
+    Term name_term = HEAP[loc];
+    if (term_tag(name_term) == NUM) {
+      if (*count >= max) {
+        fprintf(stderr, "PURPLE_ERROR: too many pattern variables\n");
+        exit(1);
+      }
+      vars[(*count)++] = term_val(name_term);
+    }
+    Term subpattern = HEAP[loc + 1];
+    purple_collect_pattern_vars(subpattern, vars, count, max);
+  }
+}
+
 fn u32 purple_bind_pattern_vars(Term pattern) {
   u8 ptag = term_tag(pattern);
   if (!(ptag >= C00 && ptag <= C16)) {
@@ -1430,6 +1485,30 @@ fn u32 purple_bind_pattern_vars(Term pattern) {
     // Or-pattern: bind variables from the first alternative
     // (all alternatives should have the same bindings)
     Term alts = HEAP[term_val(pattern)]; // first field is alternatives list
+    // Validate that all alternatives bind the same variables in the same order
+    u32 base_vars[256];
+    u32 base_count = 0;
+    int have_base = 0;
+    Term cur = alts;
+    while (term_tag(cur) >= C00 && term_tag(cur) <= C16 &&
+           term_ext(cur) == PURPLE_NAM_CON) {
+      u32 loc = term_val(cur);
+      Term alt_pattern = HEAP[loc];
+      u32 vars[256];
+      u32 count2 = 0;
+      purple_collect_pattern_vars(alt_pattern, vars, &count2, 256);
+      if (!have_base) {
+        memcpy(base_vars, vars, count2 * sizeof(u32));
+        base_count = count2;
+        have_base = 1;
+      } else {
+        if (count2 != base_count || memcmp(base_vars, vars, base_count * sizeof(u32)) != 0) {
+          fprintf(stderr, "PURPLE_ERROR: or-pattern alternatives bind different variables\n");
+          exit(1);
+        }
+      }
+      cur = HEAP[loc + 1];
+    }
     if (term_tag(alts) >= C00 && term_tag(alts) <= C16 &&
         term_ext(alts) == PURPLE_NAM_CON) {
       u32 loc = term_val(alts);
@@ -2117,6 +2196,11 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
 
       // Resolve path relative to base
       char path[512], full_path[1024];
+      if (path_len >= sizeof(path)) {
+        fprintf(stderr, "PURPLE_ERROR: include path too long\n");
+        free(out);
+        exit(1);
+      }
       memcpy(path, src + path_start, path_len);
       path[path_len] = '\0';
       sys_path_join(full_path, sizeof(full_path), base_path, path);

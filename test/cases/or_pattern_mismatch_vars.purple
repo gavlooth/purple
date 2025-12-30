@@ -1,0 +1,4 @@
+; Or-pattern alternatives with different bindings should be rejected
+(let (y 100)
+  (match 1
+    ((or x y) (+ x y))))

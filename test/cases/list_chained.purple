@@ -1,0 +1,4 @@
+; Test chained list operations: double then keep > 5
+(filter (lambda (x) (> x 5))
+  (map (lambda (x) (* x 2))
+    (cons 1 (cons 2 (cons 3 (cons 4 (nil)))))))

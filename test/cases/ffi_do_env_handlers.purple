@@ -1,0 +1,8 @@
+; RUNNER: purple-run
+; Regression: do/ffi should preserve bindings + handlers for the continuation
+(with-handlers
+  ((lit (lambda (x) (+ 100 (default-handler 'lit x)))))
+  (let (x 1)
+    (do
+      (ffi "puts" "ffi")
+      (+ x 1))))

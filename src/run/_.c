@@ -135,6 +135,7 @@ fn Term ffi_execute(Term name_term, Term args) {
 
 // Forward declaration
 fn Term ffi_eval_code(Term code);
+fn Term ffi_eval_with_menv(Term menv, Term expr);
 
 // Process result, executing FFI calls and Do sequences
 fn Term ffi_process(Term result) {
@@ -170,11 +171,32 @@ fn Term ffi_process(Term result) {
       continue;
     }
 
+    // #WMnv{menv, body} - evaluate body in preserved environment
+    if (nam == PURPLE_NAM_WMENV || nam == purple_nick("WMnv")) {
+      u32 loc = term_val(result);
+      Term menv = wnf(HEAP[loc]);
+      Term body = wnf(HEAP[loc + 1]);
+      result = ffi_eval_with_menv(menv, body);
+      continue;
+    }
+
     // Not an FFI marker, return as-is
     break;
   }
 
   return result;
+}
+
+fn Term ffi_eval_with_menv(Term menv, Term expr) {
+  u32 eval_id = table_find("purple_eval", 11);
+  u32 unwrap_id = table_find("purple_unwrap", 13);
+  Term eval_ref = term_new_ref(eval_id);
+  Term unwrap_ref = term_new_ref(unwrap_id);
+  Term app1 = term_new_app(eval_ref, menv);
+  Term app2 = term_new_app(app1, expr);
+  Term wrapped = term_new_app(unwrap_ref, app2);
+  Term result = wnf(wrapped);
+  return ffi_process(result);
 }
 
 // Evaluate a Purple code term by building and running HVM4
@@ -191,6 +213,12 @@ fn Term ffi_eval_code(Term code) {
   // For code nodes like #Lit{n}, extract and return
   if (tag >= C00 && tag <= C16) {
     u32 nam = term_ext(code);
+    if (nam == PURPLE_NAM_WMENV || nam == purple_nick("WMnv")) {
+      u32 loc = term_val(code);
+      Term menv = wnf(HEAP[loc]);
+      Term body = wnf(HEAP[loc + 1]);
+      return ffi_eval_with_menv(menv, body);
+    }
     // #Lit{n} -> extract n
     if (nam == purple_nick("Lit")) {
       u32 loc = term_val(code);
@@ -199,8 +227,8 @@ fn Term ffi_eval_code(Term code) {
   }
 
   // For complex code, run SNF
-  Term snf_result = snf(code, 0, 0);
-  return ffi_process(snf_result);
+  Term result = wnf(code);
+  return ffi_process(result);
 }
 
 // Read runtime and emit it
@@ -237,15 +265,19 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // Configure threads (default: 1)
+  thread_set_count(1);
+  wnf_set_tid(0);
+
   // Allocate memory
   BOOK  = calloc(BOOK_CAP, sizeof(u32));
   HEAP  = calloc(HEAP_CAP, sizeof(Term));
-  STACK = calloc(WNF_CAP, sizeof(Term));
   TABLE = calloc(BOOK_CAP, sizeof(char*));
 
-  if (!BOOK || !HEAP || !STACK || !TABLE) {
+  if (!BOOK || !HEAP || !TABLE) {
     sys_error("Memory allocation failed");
   }
+  heap_init_slices();
 
   // Initialize names
   purple_names_init();
@@ -294,8 +326,8 @@ int main(int argc, char **argv) {
   // Reset heap for HVM4
   memset(HEAP, 0, HEAP_CAP * sizeof(Term));
   memset(BOOK, 0, BOOK_CAP * sizeof(u32));
-  ALLOC = 0;
   ITRS = 0;
+  heap_init_slices();
 
   // Parse HVM4
   PState hs = {
@@ -320,7 +352,7 @@ int main(int argc, char **argv) {
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
 
-  Term result = snf(term_new_ref(main_id), 0, 0);
+  Term result = wnf(term_new_ref(main_id));
 
   // Process FFI calls
   result = ffi_process(result);
@@ -341,7 +373,6 @@ int main(int argc, char **argv) {
 
   free(HEAP);
   free(BOOK);
-  free(STACK);
   free(TABLE);
 
   return 0;

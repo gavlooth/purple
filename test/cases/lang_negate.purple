@@ -1,0 +1,10 @@
+; Example: Negating language
+; Demonstrates transforming the if handler to invert boolean logic
+(with-handlers
+  ((if (lambda (x)
+    ; Invert the condition: true becomes false, false becomes true
+    (let (result (default-handler 'if x))
+      (if result 0 1)))))
+  ; With inverted if: (if 1 10 20) -> condition 1 is truthy
+  ; But inverted: becomes 20
+  (if 1 10 20))

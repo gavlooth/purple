@@ -1,0 +1,4 @@
+; Test gensym: generate unique symbols
+; (gensym 0) generates symbol 10000000
+; Same inputs produce same symbols
+(sym-eq? (gensym 0) (gensym 0))

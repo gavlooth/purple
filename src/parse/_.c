@@ -99,6 +99,10 @@ static u32 PURPLE_NAM_TRY;    // Try (try expr handler)
 static u32 PURPLE_NAM_ASRT;   // Asrt (assert condition msg)
 static u32 PURPLE_NAM_TRCE;   // Trce (trace expr)
 
+// Reflection
+static u32 PURPLE_NAM_RENV;   // REnv (reify-env)
+static u32 PURPLE_NAM_GSYM;   // GSym (gensym n)
+
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
   for (u32 i = 0; name[i] != '\0'; i++) {
@@ -191,6 +195,8 @@ fn void purple_names_init(void) {
   PURPLE_NAM_TRY    = purple_nick("Try");
   PURPLE_NAM_ASRT   = purple_nick("Asrt");
   PURPLE_NAM_TRCE   = purple_nick("Trce");
+  PURPLE_NAM_RENV   = purple_nick("REnv");
+  PURPLE_NAM_GSYM   = purple_nick("GSym");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -570,6 +576,16 @@ fn Term purple_term_assert(Term cond, Term msg) {
 // Trace: (trace expr) -> evaluates and returns #Traced{value}
 fn Term purple_term_trace(Term expr) {
   return purple_ctr1(PURPLE_NAM_TRCE, expr);
+}
+
+// Reify-env: (reify-env) -> returns current environment
+fn Term purple_term_renv(void) {
+  return purple_ctr0(PURPLE_NAM_RENV);
+}
+
+// Gensym: (gensym n) -> generate unique symbol
+fn Term purple_term_gensym(Term n) {
+  return purple_ctr1(PURPLE_NAM_GSYM, n);
 }
 
 fn Term purple_term_seq(Term a, Term b) {
@@ -1086,6 +1102,19 @@ fn Term purple_parse_trace(PState *s) {
   return purple_term_trace(expr);
 }
 
+// (reify-env) -> return current environment
+fn Term purple_parse_renv(PState *s) {
+  parse_consume(s, ")");
+  return purple_term_renv();
+}
+
+// (gensym n) -> generate unique symbol
+fn Term purple_parse_gensym(PState *s) {
+  Term n = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_gensym(n);
+}
+
 fn Term purple_parse_symeq(PState *s) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -1098,6 +1127,73 @@ fn Term purple_parse_withmenv(PState *s) {
   Term body = parse_purple_form(s);
   parse_consume(s, ")");
   return purple_term_wmenv(menv_expr, body);
+}
+
+// Parse with-handlers: (with-handlers ((name1 handler1) (name2 handler2) ...) body)
+// Expands to nested with-menv/set-meta! calls
+fn Term purple_parse_withhandlers(PState *s) {
+  purple_skip(s);
+  parse_consume(s, "(");  // Start of bindings list
+
+  // Collect all handler bindings into a stack
+  #define MAX_HANDLERS 32
+  u32 names[MAX_HANDLERS];
+  Term handlers[MAX_HANDLERS];
+  u32 count = 0;
+
+  purple_skip(s);
+  while (parse_peek(s) != ')') {
+    if (count >= MAX_HANDLERS) {
+      fprintf(stderr, "Error: too many handlers in with-handlers\n");
+      exit(1);
+    }
+
+    parse_consume(s, "(");  // Start of (name handler) pair
+    purple_skip(s);
+
+    // Parse handler name (a symbol like lit, add, etc.)
+    // Use nick encoding to get the symbol value (like quoted symbols)
+    u32 name_start = s->pos;
+    while (!parse_at_end(s) && !purple_is_delim(parse_peek(s))) {
+      parse_advance(s);
+    }
+    u32 name_len = s->pos - name_start;
+
+    // Nick-encode the handler name (max 4 chars, like quoted symbols)
+    u32 nick = 0;
+    for (u32 i = 0; i < name_len && i < 4; i++) {
+      nick = ((nick << 6) + nick_letter_to_b64(s->src[name_start + i])) & EXT_MASK;
+    }
+    names[count] = nick;
+
+    // Parse handler expression
+    handlers[count] = parse_purple_form(s);
+
+    purple_skip(s);
+    parse_consume(s, ")");  // End of (name handler) pair
+
+    count++;
+    purple_skip(s);
+  }
+  parse_consume(s, ")");  // End of bindings list
+
+  // Parse body
+  Term body = parse_purple_form(s);
+  parse_consume(s, ")");  // End of with-handlers
+
+  // Build nested with-menv/set-meta! from inside out
+  // (with-handlers ((a h1) (b h2)) body) =>
+  // (with-menv (set-meta! 'a h1) (with-menv (set-meta! 'b h2) body))
+  Term result = body;
+  for (int i = count - 1; i >= 0; i--) {
+    // Build (set-meta! 'name handler) with nick-encoded symbol
+    Term quoted_name = purple_term_sym(names[i]);
+    Term set_meta = purple_term_smta(quoted_name, handlers[i]);
+    // Wrap in with-menv
+    result = purple_term_wmenv(set_meta, result);
+  }
+
+  return result;
 }
 
 fn Term purple_parse_ctrarg(PState *s) {
@@ -1192,6 +1288,46 @@ fn Term purple_parse_pattern(PState *s) {
         alts = purple_term_con(or_patterns[i], alts);
       }
       return purple_term_por(alts);
+    }
+
+    // Check if it's a list pattern: (list a b ...) or (list a b . rest)
+    if (purple_symbol_is(s, tag_start, tag_len, "list")) {
+      Term elem_patterns[16];
+      u32 elem_count = 0;
+      Term rest_pattern = 0; // 0 means no rest, otherwise the rest pattern
+      purple_skip(s);
+      while (!parse_match(s, ")")) {
+        if (elem_count >= 16) {
+          fprintf(stderr, "PURPLE_ERROR: too many list pattern elements\n");
+          exit(1);
+        }
+        // Check for rest pattern: . rest
+        if (parse_peek(s) == '.') {
+          parse_advance(s); // consume .
+          purple_skip(s);
+          rest_pattern = purple_parse_pattern(s);
+          purple_skip(s);
+          parse_consume(s, ")");
+          break;
+        }
+        elem_patterns[elem_count++] = purple_parse_pattern(s);
+        purple_skip(s);
+      }
+      // Build nested CON/NIL pattern from right to left
+      // If rest_pattern exists, use it as the tail; otherwise use NIL
+      Term result;
+      if (rest_pattern) {
+        result = rest_pattern;
+      } else {
+        // NIL pattern (empty list terminator)
+        result = purple_term_pctr(term_new_num(166118), purple_term_nil()); // 166118 = nick("NIL")
+      }
+      for (int i = (int)elem_count - 1; i >= 0; i--) {
+        // CON pattern: #PCtr{121448, [elem, rest]}
+        Term args = purple_term_con(elem_patterns[i], purple_term_con(result, purple_term_nil()));
+        result = purple_term_pctr(term_new_num(121448), args); // 121448 = nick("CON")
+      }
+      return result;
     }
 
     // Check if it's a lowercase-starting symbol (potential variable)
@@ -1597,11 +1733,20 @@ fn Term parse_purple_list(PState *s) {
     if (purple_symbol_is(s, start, len, "trace")) {
       return purple_parse_trace(s);
     }
+    if (purple_symbol_is(s, start, len, "reify-env")) {
+      return purple_parse_renv(s);
+    }
+    if (purple_symbol_is(s, start, len, "gensym")) {
+      return purple_parse_gensym(s);
+    }
     if (purple_symbol_is(s, start, len, "sym-eq?")) {
       return purple_parse_symeq(s);
     }
     if (purple_symbol_is(s, start, len, "with-menv")) {
       return purple_parse_withmenv(s);
+    }
+    if (purple_symbol_is(s, start, len, "with-handlers")) {
+      return purple_parse_withhandlers(s);
     }
     if (purple_symbol_is(s, start, len, "ctr-arg")) {
       return purple_parse_ctrarg(s);

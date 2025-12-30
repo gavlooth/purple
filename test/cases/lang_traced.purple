@@ -1,0 +1,9 @@
+; Example: Traced language
+; Uses handlers to multiply all literals by 10 (as a simple transform)
+; This demonstrates how to intercept and transform evaluation
+(with-handlers
+  ((lit (lambda (x)
+    ; Transform each literal by multiplying by 10
+    (* 10 (default-handler 'lit x)))))
+  ; (+ 1 2) becomes (+ 10 20) = 30
+  (+ 1 2))

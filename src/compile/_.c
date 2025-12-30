@@ -1087,6 +1087,20 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Reify-env: #REnv -> return current environment
+    if (nam == PURPLE_NAM_RENV && ari == 0) {
+      fputs("#REnv", e->out);
+      return;
+    }
+
+    // Gensym: #GSym{n} -> generate unique symbol
+    if (nam == PURPLE_NAM_GSYM && ari == 1) {
+      fputs("#GSym{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);
     for (u32 i = 0; i < ari; i++) {

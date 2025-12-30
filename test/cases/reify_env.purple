@@ -1,0 +1,4 @@
+; Test reify-env: get current environment
+(let (x 10)
+  (let (y 20)
+    (fst (reify-env))))

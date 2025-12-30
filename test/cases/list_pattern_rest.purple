@@ -1,0 +1,4 @@
+; Test list pattern: with rest
+(match (cons 1 (cons 2 (cons 3 nil)))
+  ((list a . rest) (+ a (length rest)))
+  (_ 0))

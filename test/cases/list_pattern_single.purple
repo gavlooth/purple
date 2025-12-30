@@ -1,0 +1,4 @@
+; Test list pattern: single element
+(match (cons 42 nil)
+  ((list a) a)
+  (_ 0))

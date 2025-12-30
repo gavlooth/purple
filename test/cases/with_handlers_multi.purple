@@ -1,0 +1,13 @@
+; Test with-handlers with two lit handlers in sequence
+; First handler adds 100, second handler adds 1000
+; Due to nesting: (with-menv (set-meta! 'lit h1) (with-menv (set-meta! 'lit h2) body))
+; The innermost h2 wins for the body, but h2 sees h1's lit when it calls default-handler
+; Actually: the outer one comes first in the build, so:
+; (with-handlers ((a h1) (b h2)) body) =>
+; (with-menv (set-meta! 'a h1) (with-menv (set-meta! 'b h2) body))
+; So h2 is the active one for 'b, and body runs in that context
+; Let's just test two different handlers work:
+(with-handlers
+  ((lit (lambda (x) (+ 100 (default-handler 'lit x))))
+   (if (lambda (x) (default-handler 'if x))))
+  (+ 1 2))

@@ -1,0 +1,4 @@
+; Test list pattern: empty list
+(match nil
+  ((list) 1)
+  (_ 0))

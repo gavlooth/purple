@@ -1190,6 +1190,13 @@
       #Trce: λ&expr.
         !!&vexpr = @purple_eval(#MEnv{env, handlers, parent, level})(expr);
         #Traced{vexpr}
+      // Reify-env: return current environment as a value
+      #REnv: env
+      // Gensym: generate a unique symbol from index n
+      // Returns #Sym{10000000 + n} to create symbols in a reserved range
+      #GSym: λ&n.
+        !!&vn = @purple_eval(#MEnv{env, handlers, parent, level})(n);
+        λ{#Cst: λ&idx. #Sym{(10000000 + idx)}; λ&u. @pink_err(#gsym)}(vn)
       // Quasiquote: process expression, evaluating unquotes
       #QQ: λ&inner.
         @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_eval)(inner)
@@ -1510,6 +1517,12 @@
       #Trce: λ&expr.
         !!&vexpr = @purple_evalc(#MEnv{env, handlers, parent, level})(expr);
         #Traced{vexpr}
+      // Reify-env: return current environment (compile mode)
+      #REnv: @pink_lift(env)
+      // Gensym: generate unique symbol (compile mode)
+      #GSym: λ&n.
+        !!&vn = @purple_evalc(#MEnv{env, handlers, parent, level})(n);
+        λ{#Cst: λ&idx. @pink_lift(#Sym{(10000000 + idx)}); λ&u. @pink_err(#gsym)}(vn)
       // Quasiquote: process expression, evaluating unquotes in compile mode
       #QQ: λ&inner.
         @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_evalc)(inner)

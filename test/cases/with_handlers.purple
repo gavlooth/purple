@@ -1,0 +1,5 @@
+; Test with-handlers: bulk handler update
+; Set lit handler to add 100
+(with-handlers
+  ((lit (lambda (x) (+ 100 (default-handler 'lit x)))))
+  (+ 1 2))

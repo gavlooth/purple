@@ -1,0 +1,2 @@
+; Test gensym: different indices produce different symbols
+(sym-eq? (gensym 0) (gensym 1))

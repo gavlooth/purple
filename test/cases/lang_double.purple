@@ -1,0 +1,9 @@
+; Example: Doubling language
+; Demonstrates nesting meta-levels: we compile code that uses doubled literals
+; At level 1, literals are doubled
+(with-handlers
+  ((lit (lambda (x)
+    (let (v (default-handler 'lit x))
+      (+ v v)))))
+  ; Result: (+ (1+1) (2+2)) = (+ 2 4) = 6
+  (+ 1 2))

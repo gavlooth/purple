@@ -38,12 +38,12 @@ int main(int argc, char **argv) {
   // Allocate runtime storage
   BOOK  = calloc(BOOK_CAP, sizeof(u32));
   HEAP  = calloc(HEAP_CAP, sizeof(Term));
-  STACK = calloc(WNF_CAP, sizeof(Term));
   TABLE = calloc(BOOK_CAP, sizeof(char*));
 
-  if (!BOOK || !HEAP || !STACK || !TABLE) {
+  if (!BOOK || !HEAP || !TABLE) {
     sys_error("Memory allocation failed");
   }
+  heap_init_slices();
 
   // Read Purple source
   char *src = sys_file_read(in_path);
@@ -85,7 +85,6 @@ int main(int argc, char **argv) {
 
   free(HEAP);
   free(BOOK);
-  free(STACK);
   free(TABLE);
 
   return 0;

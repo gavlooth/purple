@@ -517,6 +517,16 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Mov (multi-use binding without dup overhead)
+    if (nam == PURPLE_NAM_MOV && ari == 2) {
+      fputs("#Mov{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
     // If
     if (nam == PURPLE_NAM_IF && ari == 3) {
       fputs("#If{", e->out);

@@ -66,6 +66,7 @@ static u32 PURPLE_NAM_PWLD; // Pattern: wildcard
 static u32 PURPLE_NAM_PVAR; // Pattern: variable (for nested)
 static u32 PURPLE_NAM_FFI;  // Foreign function call
 static u32 PURPLE_NAM_DO;   // IO sequencing
+static u32 PURPLE_NAM_MOV;  // Move binding (multi-use without dup)
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -131,6 +132,7 @@ fn void purple_names_init(void) {
   PURPLE_NAM_PVAR  = purple_nick("PVar");
   PURPLE_NAM_FFI   = purple_nick("FFI");
   PURPLE_NAM_DO    = purple_nick("Do");
+  PURPLE_NAM_MOV   = purple_nick("Mov");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -310,6 +312,10 @@ fn Term purple_term_app(Term fun, Term arg) {
 
 fn Term purple_term_let(Term val, Term body) {
   return purple_ctr2(PURPLE_NAM_LET, val, body);
+}
+
+fn Term purple_term_mov(Term val, Term body) {
+  return purple_ctr2(PURPLE_NAM_MOV, val, body);
 }
 
 fn Term purple_term_if(Term c, Term t, Term e) {
@@ -591,6 +597,25 @@ fn Term purple_parse_let(PState *s) {
   purple_bind_pop(1);
   parse_consume(s, ")");
   return purple_term_let(val, body);
+}
+
+// mov: (mov (x value) body) - multi-use binding without dup overhead
+// The variable x can be used multiple times in body
+fn Term purple_parse_mov(PState *s) {
+  parse_consume(s, "(");
+  u32 start = 0;
+  u32 len   = 0;
+  if (!purple_parse_symbol_token(s, &start, &len)) {
+    parse_error(s, "binding name", parse_peek(s));
+  }
+  u32 sym_id = table_find(s->src + start, len);
+  Term val = parse_purple_form(s);
+  parse_consume(s, ")");
+  purple_bind_push(sym_id);
+  Term body = parse_purple_form(s);
+  purple_bind_pop(1);
+  parse_consume(s, ")");
+  return purple_term_mov(val, body);
 }
 
 // letrec: (letrec ((name (lambda (x) body))) expr)
@@ -1175,6 +1200,9 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "let")) {
       return purple_parse_let(s);
+    }
+    if (purple_symbol_is(s, start, len, "mov")) {
+      return purple_parse_mov(s);
     }
     if (purple_symbol_is(s, start, len, "letrec")) {
       return purple_parse_letrec(s);

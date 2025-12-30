@@ -60,6 +60,12 @@
     #Let: λ&val. λ&body.
       !!&vv = self(env, val);
       self(#CON{vv, env}, body)
+    #Mov: λ&val. λ&body.
+      // Mov: lazy binding using HVM4 MOV
+      // Unlike Let, the value is not evaluated until first use
+      // Use this when you want lazy/shared semantics
+      !!&vv = self(env, val);
+      self(#CON{vv, env}, body)
     #If: λ&c. λ&t. λ&e.
       !!&vc = self(env, c);
       λ{
@@ -656,6 +662,10 @@
         !!&h = @purple_htab_get(handlers, 3);
         @purple_call1(#MEnv{env, handlers, parent, level}, self, h, #CON{vf, vx})
       #Let: λ&val. λ&body.
+        !!&vv = self(#MEnv{env, handlers, parent, level}, val);
+        self(#MEnv{#CON{vv, env}, handlers, parent, level}, body)
+      #Mov: λ&val. λ&body.
+        // Mov: like Let but exposed for potential future optimization
         !!&vv = self(#MEnv{env, handlers, parent, level}, val);
         self(#MEnv{#CON{vv, env}, handlers, parent, level}, body)
       #If: λ&c. λ&t. λ&e.

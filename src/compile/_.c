@@ -883,8 +883,8 @@ fn void purple_compile_emit_runtime(FILE *out, Term ast, const char *runtime_pat
   fputs(runtime, out);
   free(runtime);
 
-  // Emit main using Purple evaluator
-  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0, #NIL, #NIL), ", out);
+  // Emit main using Purple evaluator (curried calling convention)
+  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0)(#NIL)(#NIL))(", out);
   purple_compile_emit(out, ast);
   fputs("))\n", out);
 }

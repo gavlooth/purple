@@ -1,0 +1,3 @@
+; Quasiquote with unquote-splicing
+(let (items (cons 2 (cons 3 nil)))
+  `(cons 1 ,@items))

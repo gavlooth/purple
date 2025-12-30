@@ -1,0 +1,2 @@
+; Test filter - keep elements > 2
+(filter (lambda (x) (> x 2)) (cons 1 (cons 2 (cons 3 (cons 4 (nil))))))

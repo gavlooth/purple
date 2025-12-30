@@ -1,0 +1,5 @@
+; Test as-pattern: bind both the whole and destructured parts
+; x binds to (cons 1 2), a binds to 1, b binds to 2
+; Result: (cons x (cons a (cons b nil))) = ((1,2), 1, 2)
+(match (cons 1 2)
+  ((x @ (CON a b)) (+ a b)))

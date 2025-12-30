@@ -444,18 +444,19 @@
   ; _ : @pink_err(#htab)}(tab)
 
 // Symbol to handler index mapping
-// Maps handler name symbols to indices: lit=0, var=1, lam=2, app=3, if=4, lft=5, run=6, em=7, clam=8
+// Maps handler name symbols (nick encoded) to indices: lit=0, var=1, lam=2, app=3, if=4, lft=5, run=6, em=7, clam=8
+// Nick encodings: lit=49748, var=90194, lam=49229, app=5136, if=582, lft=49556, run=75086, em=333, clam=835661, add=4356
 @purple_sym_to_idx = λ&sym.
   λ{
-    #lit: 0
-    #var: 1
-    #lam: 2
-    #app: 3
-    #if: 4
-    #lft: 5
-    #run: 6
-    #em: 7
-    #clam: 8
+    49748: 0   // lit
+    90194: 1   // var
+    49229: 2   // lam
+    5136: 3    // app
+    582: 4     // if
+    49556: 5   // lft
+    75086: 6   // run
+    333: 7     // em
+    835661: 8  // clam
     _ : @pink_err(#symi)
   }(sym)
 
@@ -516,6 +517,16 @@
       _ : @pink_err(#h1)
     }(handler)
   ; _ : @pink_err(#menv)}(menv)
+
+// Call default handler by symbol name
+// Used for handler delegation: (default-handler 'add arg)
+// Gets the default handler from @purple_default_handlers and calls it
+@purple_call_default_handler = λm. λef. λn. λa.
+  !!&menv = m; %eval_fn = ef; !!&name = n; %arg = a;
+  λ{#Sym: λ&s.
+    !!&handler = @purple_htab_get_by_sym(@purple_default_handlers)(s);
+    @purple_call1(menv)(eval_fn)(handler)(arg)
+  ; _ : @pink_err(#defh)}(name)
 
 // Wrap a Purple closure for use as a handler
 @purple_wrap_handler = λ&clo.
@@ -609,8 +620,9 @@
 // Check if a value matches a pattern - curried
 // Returns #CON{matched?, bindings_list} where bindings_list is values to bind
 // For quoted expressions (#Cod), unwraps and matches against inner value
+// NOW SUPPORTS NESTED PATTERNS: sub-patterns in constructor args are recursively matched
 @purple_pattern_match = λv. λp.
-  %val = v; %pattern = p;
+  !!&val = v; %pattern = p;
   λ{
     // Wildcard matches anything, no bindings
     #PWld: #CON{1, #NIL}
@@ -622,9 +634,24 @@
     // Uses helper to handle #Cod unwrapping (can't reuse pattern after matching)
     #PLit: λ&n. @purple_match_lit(val)(n)
 
-    // Constructor pattern matches if value has same tag
-    // Uses helper to handle #Cod unwrapping (can't reuse pattern after matching)
-    #PCtr: λ&tag. λ&arg_names. @purple_match_ctr(val)(tag)(arg_names)
+    // Constructor pattern with nested sub-patterns
+    // arg_patterns is a list of patterns (can be nested)
+    #PCtr: λ&tag. λ&arg_patterns. @purple_match_ctr(val)(tag)(arg_patterns)
+
+    // Or-pattern: try each alternative until one matches
+    #POr: λ&alternatives. @purple_match_or(val)(alternatives)
+
+    // As-pattern: bind name to whole value and also match subpattern
+    #PAs: λ&name. λ&subpattern.
+      !!&sub_result = @purple_pattern_match(val)(subpattern);
+      λ{
+        #CON: λ&matched. λ&sub_bindings.
+          λ{
+            0: #CON{0, #NIL}  // Subpattern didn't match
+            λ&m. #CON{1, #CON{val, sub_bindings}}  // Prepend val to bindings
+          }(matched)
+        _ : #CON{0, #NIL}
+      }(sub_result)
 
     _ : #CON{0, #NIL}
   }(pattern)
@@ -638,49 +665,136 @@
     _ : #CON{0, #NIL}
   }(val)
 
+// Match an or-pattern: try each alternative until one matches
+// Returns the result of the first matching alternative
+@purple_match_or = λv. λas.
+  !!&val = v; %alts = as;
+  λ{
+    #NIL: #CON{0, #NIL}  // No alternatives matched
+    #CON: λ&alt. λ&rest.
+      !!&result = @purple_pattern_match(val)(alt);
+      λ{
+        #CON: λ&matched. λ&bindings.
+          λ{
+            0: @purple_match_or(val)(rest)  // Try next alternative
+            λ&m. #CON{1, bindings}  // This alternative matched
+          }(matched)
+        _ : @purple_match_or(val)(rest)
+      }(result)
+    _ : #CON{0, #NIL}
+  }(alts)
+
 // Match a constructor pattern against a value - curried
 // tag is the nick-encoded constructor name
-// arg_names is a list of name IDs (ignored, we just need count)
+// arg_patterns is a list of sub-patterns (can be nested)
 // Handles #Cod unwrapping for quoted expressions
 // NOTE: Can't use val in default case (HVM4 limitation), so handle each constructor explicitly
 @purple_match_ctr = λv. λt. λa.
-  %val = v; %tag = t; %arg_names = a;
+  %val = v; %tag = t; %arg_patterns = a;
   λ{
-    #Cod: λ&inner. @purple_match_ctr(inner)(tag)(arg_names)
-    #Lit: λ&a. @purple_match_tag_extract(156244)(tag)(#CON{#Cst{a}, #NIL})(arg_names)
-    #Sym: λ&a. @purple_match_tag_extract(185933)(tag)(#CON{#Sym{a}, #NIL})(arg_names)
-    #Var: λ&a. @purple_match_tag_extract(196690)(tag)(#CON{#Cst{a}, #NIL})(arg_names)
-    #Lam: λ&a. @purple_match_tag_extract(155725)(tag)(#CON{a, #NIL})(arg_names)
-    #LamR: λ&a. @purple_match_tag_extract(9966444)(tag)(#CON{a, #NIL})(arg_names)
-    #App: λ&a. λ&b. @purple_match_tag_extract(111632)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #Let: λ&a. λ&b. @purple_match_tag_extract(155988)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #If: λ&a. λ&b. λ&c. @purple_match_tag_extract(2246)(tag)(#CON{a, #CON{b, #CON{c, #NIL}}})(arg_names)
-    #Add: λ&a. λ&b. @purple_match_tag_extract(110852)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #Sub: λ&a. λ&b. @purple_match_tag_extract(185666)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #Mul: λ&a. λ&b. @purple_match_tag_extract(161100)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #Eql: λ&a. λ&b. @purple_match_tag_extract(128076)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #CHR: λ&c. @purple_match_tag_extract(121004)(tag)(#CON{#Cst{c}, #NIL})(arg_names)
-    #CON: λ&a. λ&b. @purple_match_tag_extract(121448)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #NIL: @purple_match_tag_extract(166118)(tag)(#NIL)(arg_names)
-    #Lft: λ&a. @purple_match_tag_extract(156052)(tag)(#CON{a, #NIL})(arg_names)
-    #Run: λ&a. λ&b. @purple_match_tag_extract(181582)(tag)(#CON{a, #CON{b, #NIL}})(arg_names)
-    #Fst: λ&a. @purple_match_tag_extract(132308)(tag)(#CON{a, #NIL})(arg_names)
-    #Snd: λ&a. @purple_match_tag_extract(185220)(tag)(#CON{a, #NIL})(arg_names)
-    #EM: λ&a. @purple_match_tag_extract(2023)(tag)(#CON{a, #NIL})(arg_names)
-    #CLam: λ&a. @purple_match_tag_extract(7757901)(tag)(#CON{a, #NIL})(arg_names)
-    #Cst: λ&a. @purple_match_tag_extract(120020)(tag)(#CON{#Cst{a}, #NIL})(arg_names)
-    #Clo: λ&e. λ&b. @purple_match_tag_extract(119567)(tag)(#CON{e, #CON{b, #NIL}})(arg_names)
-    #CloR: λ&e. λ&b. @purple_match_tag_extract(7652332)(tag)(#CON{e, #CON{b, #NIL}})(arg_names)
+    #Cod: λ&inner. @purple_match_ctr(inner)(tag)(arg_patterns)
+    #Lit: λ&a. @purple_match_tag_and_args(156244)(tag)(#CON{#Cst{a}, #NIL})(arg_patterns)
+    #Sym: λ&a. @purple_match_tag_and_args(185933)(tag)(#CON{#Sym{a}, #NIL})(arg_patterns)
+    #Var: λ&a. @purple_match_tag_and_args(196690)(tag)(#CON{#Cst{a}, #NIL})(arg_patterns)
+    #Lam: λ&a. @purple_match_tag_and_args(155725)(tag)(#CON{a, #NIL})(arg_patterns)
+    #LamR: λ&a. @purple_match_tag_and_args(9966444)(tag)(#CON{a, #NIL})(arg_patterns)
+    #App: λ&a. λ&b. @purple_match_tag_and_args(111632)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #Let: λ&a. λ&b. @purple_match_tag_and_args(155988)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #If: λ&a. λ&b. λ&c. @purple_match_tag_and_args(2246)(tag)(#CON{a, #CON{b, #CON{c, #NIL}}})(arg_patterns)
+    #Add: λ&a. λ&b. @purple_match_tag_and_args(110852)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #Sub: λ&a. λ&b. @purple_match_tag_and_args(185666)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #Mul: λ&a. λ&b. @purple_match_tag_and_args(161100)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #Eql: λ&a. λ&b. @purple_match_tag_and_args(128076)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #CHR: λ&c. @purple_match_tag_and_args(121004)(tag)(#CON{#Cst{c}, #NIL})(arg_patterns)
+    #CON: λ&a. λ&b. @purple_match_tag_and_args(121448)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #NIL: @purple_match_tag_and_args(166118)(tag)(#NIL)(arg_patterns)
+    #Lft: λ&a. @purple_match_tag_and_args(156052)(tag)(#CON{a, #NIL})(arg_patterns)
+    #Run: λ&a. λ&b. @purple_match_tag_and_args(181582)(tag)(#CON{a, #CON{b, #NIL}})(arg_patterns)
+    #Fst: λ&a. @purple_match_tag_and_args(132308)(tag)(#CON{a, #NIL})(arg_patterns)
+    #Snd: λ&a. @purple_match_tag_and_args(185220)(tag)(#CON{a, #NIL})(arg_patterns)
+    #EM: λ&a. @purple_match_tag_and_args(2023)(tag)(#CON{a, #NIL})(arg_patterns)
+    #CLam: λ&a. @purple_match_tag_and_args(7757901)(tag)(#CON{a, #NIL})(arg_patterns)
+    #Cst: λ&a. @purple_match_tag_and_args(120020)(tag)(#CON{#Cst{a}, #NIL})(arg_patterns)
+    #Clo: λ&e. λ&b. @purple_match_tag_and_args(119567)(tag)(#CON{e, #CON{b, #NIL}})(arg_patterns)
+    #CloR: λ&e. λ&b. @purple_match_tag_and_args(7652332)(tag)(#CON{e, #CON{b, #NIL}})(arg_patterns)
     _ : #CON{0, #NIL}  // Unknown constructor - no match
   }(val)
 
-// Compare tags and return extracted args if match - curried
-@purple_match_tag_extract = λvt. λpt. λea. λan.
-  %val_tag = vt; %pattern_tag = pt; %extracted_args = ea; %arg_names = an;
+// Compare tags, then recursively match sub-patterns against extracted args
+// Returns #CON{matched?, bindings_list}
+// Fast path: if all patterns are simple PVar, return extracted_args directly
+// Slow path: nested patterns need recursive matching
+@purple_match_tag_and_args = λvt. λpt. λea. λap.
+  %val_tag = vt; %pattern_tag = pt; %extracted_args = ea; %arg_patterns = ap;
   λ{
     0: #CON{0, #NIL}  // Tags don't match
-    _ : λ&u. #CON{1, extracted_args}  // Tags match, return the args
+    _ : λ&u.
+      !!&all_simple = @purple_all_pvar(arg_patterns);
+      λ{
+        1: #CON{1, extracted_args}  // All PVar - return args directly
+        _ : λ&u2. @purple_match_args(extracted_args)(arg_patterns)
+      }(all_simple)
   }((val_tag == pattern_tag))
+
+// Check if all patterns in list are simple PVar
+@purple_all_pvar = λps.
+  λ{
+    #NIL: 1
+    #CON: λ&p. λ&rest.
+      λ{
+        #PVar: λ&n. @purple_all_pvar(rest)
+        _ : λ&u. 0
+      }(p)
+    _ : 0
+  }(ps)
+
+// Recursively match a list of values against a list of patterns
+// Returns #CON{all_matched?, all_bindings}
+// Base case: both empty -> success with no bindings
+// Values but no patterns -> fail
+// Patterns but no values -> fail
+// Both have elements -> match first, if ok recurse on rest
+@purple_match_args = λvs. λ&ps.
+  λ{
+    #NIL: λ{#NIL: #CON{1, #NIL}; _ : #CON{0, #NIL}}(ps)
+    #CON: λ&v. λ&vr.
+      λ{
+        #NIL: #CON{0, #NIL}
+        #CON: λ&p. λ&pr. @purple_match_one_then_rest(v)(p)(vr)(pr)
+        _ : #CON{0, #NIL}
+      }(ps)
+    _ : #CON{0, #NIL}
+  }(vs)
+
+// Match one value against pattern, then continue with rest if successful
+// NOTE: Variable names use short forms (bs/rbs) to avoid HVM4 nick collisions
+@purple_match_one_then_rest = λv. λp. λvr. λpr.
+  !!&match_result = @purple_pattern_match(v)(p);
+  λ{
+    #CON: λ&ok. λ&bs.
+      λ{
+        0: #CON{0, #NIL}
+        λ&ign1.
+          !!&rest_result = @purple_match_args(vr)(pr);
+          λ{
+            #CON: λ&rok. λ&rbs.
+              λ{
+                0: #CON{0, #NIL}
+                λ&ign2. #CON{1, @purple_list_concat(bs)(rbs)}
+              }(rok)
+            _ : #CON{0, #NIL}
+          }(rest_result)
+      }(ok)
+    _ : #CON{0, #NIL}
+  }(match_result)
+
+// Concatenate two lists
+@purple_list_concat = λa. λ&b.
+  λ{
+    #NIL: b
+    #CON: λ&h. λ&t. #CON{h, @purple_list_concat(t)(b)}
+    _ : b
+  }(a)
 
 // Try each case until one matches (legacy - now compiled to native HVM4 match) - curried
 // Returns the result of the matching case's body
@@ -692,22 +806,25 @@
     @purple_try_cases_inner(env)(handlers)(parent)(level)(eval_fn)(val)(cases)
   ; _ : @pink_err(#menv)}(menv)
 
+// Try each case: #Case{pattern, guard, body}
+// Guard can be #NIL (no guard) or an expression to evaluate
+// If guard is present and evaluates to 0/#F, continue to next case
 @purple_try_cases_inner = λe. λh. λp. λl. λef. λv. λc.
   %env = e; %handlers = h; %parent = p; %level = l; %eval_fn = ef; %val = v; %cases = c;
   λ{
     #NIL: @pink_err(#nmch)  // No case matched
     #CON: λ&case. λ&rest.
       λ{
-        #Case: λ&pattern. λ&body.
+        #Case: λ&pattern. λ&guard. λ&body.
           %match_result = @purple_pattern_match(val)(pattern);
           λ{
-            #CON: λ&matched. λ&bindings.
+            #CON: λ&matched. λ&bds.
               λ{
                 0: @purple_try_cases_inner(env)(handlers)(parent)(level)(eval_fn)(val)(rest)  // Try next case
                 λ&u.
-                  // Match! Bind variables and evaluate body
-                  %new_env = @purple_bind_all(env)(bindings);
-                  eval_fn(#MEnv{new_env, handlers, parent, level})(body)
+                  // Pattern matched! Now check the guard
+                  %new_env = @purple_bind_all(env)(bds);
+                  @purple_check_guard(new_env)(handlers)(parent)(level)(eval_fn)(guard)(body)(val)(rest)
               }(matched)
             _ : @pink_err(#mat)
           }(match_result)
@@ -715,6 +832,43 @@
       }(case)
     _ : @pink_err(#cases)
   }(cases)
+
+// Check guard expression, evaluate body if guard passes
+// NOTE: Variables used in multiple branches need DUP bindings
+@purple_check_guard = λne. λh. λp. λl. λef. λg. λbd. λv. λr.
+  !!&new_env = ne; !!&handlers = h; !!&parent = p; !!&level = l; !!&eval_fn = ef;
+  !!&guard = g; !!&body = bd; !!&val = v; !!&rest = r;
+  λ{
+    #NIL:
+      // No guard - evaluate body directly
+      eval_fn(#MEnv{new_env, handlers, parent, level})(body)
+    _ : λ&u.
+      // Evaluate guard expression in the new environment (with pattern bindings)
+      !!&guard_result = eval_fn(#MEnv{new_env, handlers, parent, level})(guard);
+      @purple_check_guard_result(new_env)(handlers)(parent)(level)(eval_fn)(guard_result)(body)(val)(rest)
+  }(guard)
+
+// Check if guard result is truthy
+// NOTE: Variables used in multiple branches need DUP bindings
+@purple_check_guard_result = λne. λh. λp. λl. λef. λgr. λbd. λv. λr.
+  !!&new_env = ne; !!&handlers = h; !!&parent = p; !!&level = l; !!&eval_fn = ef;
+  !!&guard_result = gr; !!&body = bd; !!&val = v; !!&rest = r;
+  λ{
+    #Cst: λ&n.
+      λ{
+        0: @purple_try_cases_inner(new_env)(handlers)(parent)(level)(eval_fn)(val)(rest)  // Guard failed - try next case
+        λ&m. eval_fn(#MEnv{new_env, handlers, parent, level})(body)  // Guard passed - evaluate body
+      }(n)
+    #Sym: λ&s.
+      // Symbol #F is false, anything else is true
+      λ{
+        #F: @purple_try_cases_inner(new_env)(handlers)(parent)(level)(eval_fn)(val)(rest)
+        _ : λ&u. eval_fn(#MEnv{new_env, handlers, parent, level})(body)
+      }(s)
+    _ : λ&u.
+      // Any other value is truthy
+      eval_fn(#MEnv{new_env, handlers, parent, level})(body)
+  }(guard_result)
 
 // Bind a list of values to environment - curried
 // Bindings list is in order [first, second, ...]
@@ -976,7 +1130,9 @@
         @purple_ctr_tag(ve)
       #Eval: λ&e.
         !!&ve = @purple_eval(#MEnv{env, handlers, parent, level})(e);
-        λ{#Cod: λ&code. @purple_eval(#MEnv{env, handlers, parent, level})(code); _ : @pink_err(#eval)}(ve)
+        // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
+        // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
+        λ{#Cod: λ&code. @purple_eval(#MEnv{env, handlers, parent, level})(code); λ&u. @purple_eval(#MEnv{env, handlers, parent, level})(ve)}(ve)
       #MLvl: #Cst{level}
       #Shft: λ&n. λ&e.
         !!&vn = @purple_eval(#MEnv{env, handlers, parent, level})(n);
@@ -1004,6 +1160,86 @@
         // Evaluate first, discard result, evaluate rest
         !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(first);
         @purple_do_continue(#MEnv{env, handlers, parent, level})(@purple_eval)(vf)(rest)
+      // Default handler delegation: (default-handler 'name arg)
+      // Calls the default handler for a given handler name symbol
+      #DefH: λ&name. λ&arg.
+        !!&vname = @purple_eval(#MEnv{env, handlers, parent, level})(name);
+        !!&varg = @purple_eval(#MEnv{env, handlers, parent, level})(arg);
+        // Get default handler by name and call it
+        @purple_call_default_handler(#MEnv{env, handlers, parent, level})(@purple_eval)(vname)(varg)
+      // Error: (error msg) -> raises an error with the evaluated message
+      #ErrR: λ&msg.
+        !!&vmsg = @purple_eval(#MEnv{env, handlers, parent, level})(msg);
+        #Err{vmsg}
+      // Try: (try expr handler) -> catch errors with handler
+      #Try: λ&expr. λ&handler.
+        !!&vexpr = @purple_eval(#MEnv{env, handlers, parent, level})(expr);
+        !!&vhandler = @purple_eval(#MEnv{env, handlers, parent, level})(handler);
+        λ{
+          #Err: λ&msg. @purple_apply_menv(#MEnv{env, handlers, parent, level})(@purple_eval)(vhandler)(msg)
+          λ&u. vexpr
+        }(vexpr)
+      // Assert: (assert cond msg) -> raise error if cond is false
+      #Asrt: λ&cond. λ&msg.
+        !!&vcond = @purple_eval(#MEnv{env, handlers, parent, level})(cond);
+        λ{
+          #Cst: λ&n. λ{0: !!&vmsg = @purple_eval(#MEnv{env, handlers, parent, level})(msg); #Err{vmsg}; λ&u. #Cst{1}}(n)
+          λ&u. @pink_err(#asrt)
+        }(vcond)
+      // Trace: (trace expr) -> evaluate and return #Traced{value}
+      #Trce: λ&expr.
+        !!&vexpr = @purple_eval(#MEnv{env, handlers, parent, level})(expr);
+        #Traced{vexpr}
+      // Quasiquote: process expression, evaluating unquotes
+      #QQ: λ&inner.
+        @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_eval)(inner)
+      // Unquote outside quasiquote is an error
+      #UQ: λ&inner.
+        @pink_err(#uq)
+      // Unquote-splicing outside quasiquote is an error
+      #UQS: λ&inner.
+        @pink_err(#uqs)
+      // List operations
+      #Map: λ&fn. λ&lst.
+        !!&vfn = @purple_eval(#MEnv{env, handlers, parent, level})(fn);
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_map(#MEnv{env, handlers, parent, level})(vfn)(vlst)
+      #Fltr: λ&fn. λ&lst.
+        !!&vfn = @purple_eval(#MEnv{env, handlers, parent, level})(fn);
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_filter(#MEnv{env, handlers, parent, level})(vfn)(vlst)
+      #Fold: λ&fn. λ&init. λ&lst.
+        !!&vfn = @purple_eval(#MEnv{env, handlers, parent, level})(fn);
+        !!&vinit = @purple_eval(#MEnv{env, handlers, parent, level})(init);
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_foldr(#MEnv{env, handlers, parent, level})(vfn)(vinit)(vlst)
+      #FdLf: λ&fn. λ&init. λ&lst.
+        !!&vfn = @purple_eval(#MEnv{env, handlers, parent, level})(fn);
+        !!&vinit = @purple_eval(#MEnv{env, handlers, parent, level})(init);
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_foldl(#MEnv{env, handlers, parent, level})(vfn)(vinit)(vlst)
+      #Len: λ&lst.
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_length(vlst)
+      #Apnd: λ&a. λ&b.
+        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
+        @purple_list_append(va)(vb)
+      #Rev: λ&lst.
+        !!&vlst = @purple_eval(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_reverse(vlst)
+      // Higher-order function utilities
+      #Comp: λ&f. λ&g.
+        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
+        !!&vg = @purple_eval(#MEnv{env, handlers, parent, level})(g);
+        @purple_compose(#MEnv{env, handlers, parent, level})(vf)(vg)
+      #Flip: λ&f.
+        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
+        @purple_flip(#MEnv{env, handlers, parent, level})(vf)
+      #Appl: λ&f. λ&args.
+        !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
+        !!&vargs = @purple_eval(#MEnv{env, handlers, parent, level})(args);
+        @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -1223,7 +1459,8 @@
         @purple_ctr_tag(ve)
       #Eval: λ&e.
         !!&ve = @purple_evalc(#MEnv{env, handlers, parent, level})(e);
-        λ{#Cod: λ&code. @purple_evalc(#MEnv{env, handlers, parent, level})(code); _ : @pink_err(#eval)}(ve)
+        // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
+        λ{#Cod: λ&code. @purple_evalc(#MEnv{env, handlers, parent, level})(code); _ : @purple_evalc(#MEnv{env, handlers, parent, level})(ve)}(ve)
       #MLvl: @pink_lift(#Cst{level})
       #Shft: λ&n. λ&e.
         !!&vn = @purple_evalc(#MEnv{env, handlers, parent, level})(n);
@@ -1245,9 +1482,313 @@
       #Do: λ&first. λ&rest.
         !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(first);
         @purple_do_continue(#MEnv{env, handlers, parent, level})(@purple_evalc)(vf)(rest)
+      // Default handler delegation (compile mode)
+      #DefH: λ&name. λ&arg.
+        !!&vname = @purple_evalc(#MEnv{env, handlers, parent, level})(name);
+        !!&varg = @purple_evalc(#MEnv{env, handlers, parent, level})(arg);
+        @purple_call_default_handler(#MEnv{env, handlers, parent, level})(@purple_evalc)(vname)(varg)
+      // Error: raise an error with a message
+      #ErrR: λ&msg.
+        !!&vmsg = @purple_evalc(#MEnv{env, handlers, parent, level})(msg);
+        #Err{vmsg}
+      // Try: (try expr handler) -> catch errors with handler (compile mode)
+      #Try: λ&expr. λ&handler.
+        !!&vexpr = @purple_evalc(#MEnv{env, handlers, parent, level})(expr);
+        !!&vhandler = @purple_evalc(#MEnv{env, handlers, parent, level})(handler);
+        λ{
+          #Err: λ&msg. @purple_apply_menv(#MEnv{env, handlers, parent, level})(@purple_evalc)(vhandler)(msg)
+          λ&u. vexpr
+        }(vexpr)
+      // Assert: (assert cond msg) -> raise error if cond is false (compile mode)
+      #Asrt: λ&cond. λ&msg.
+        !!&vcond = @purple_evalc(#MEnv{env, handlers, parent, level})(cond);
+        λ{
+          #Cst: λ&n. λ{0: !!&vmsg = @purple_evalc(#MEnv{env, handlers, parent, level})(msg); #Err{vmsg}; λ&u. @pink_lift(#Cst{1})}(n)
+          λ&u. @pink_err(#asrt)
+        }(vcond)
+      // Trace: (trace expr) -> evaluate and return #Traced{value} (compile mode)
+      #Trce: λ&expr.
+        !!&vexpr = @purple_evalc(#MEnv{env, handlers, parent, level})(expr);
+        #Traced{vexpr}
+      // Quasiquote: process expression, evaluating unquotes in compile mode
+      #QQ: λ&inner.
+        @purple_qq_process(#MEnv{env, handlers, parent, level})(@purple_evalc)(inner)
+      // Unquote outside quasiquote is an error
+      #UQ: λ&inner.
+        @pink_err(#uq)
+      // Unquote-splicing outside quasiquote is an error
+      #UQS: λ&inner.
+        @pink_err(#uqs)
+      // List operations (compile mode)
+      #Map: λ&fn. λ&lst.
+        !!&vfn = @purple_evalc(#MEnv{env, handlers, parent, level})(fn);
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_map(#MEnv{env, handlers, parent, level})(vfn)(vlst)
+      #Fltr: λ&fn. λ&lst.
+        !!&vfn = @purple_evalc(#MEnv{env, handlers, parent, level})(fn);
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_filter(#MEnv{env, handlers, parent, level})(vfn)(vlst)
+      #Fold: λ&fn. λ&init. λ&lst.
+        !!&vfn = @purple_evalc(#MEnv{env, handlers, parent, level})(fn);
+        !!&vinit = @purple_evalc(#MEnv{env, handlers, parent, level})(init);
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_foldr(#MEnv{env, handlers, parent, level})(vfn)(vinit)(vlst)
+      #FdLf: λ&fn. λ&init. λ&lst.
+        !!&vfn = @purple_evalc(#MEnv{env, handlers, parent, level})(fn);
+        !!&vinit = @purple_evalc(#MEnv{env, handlers, parent, level})(init);
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_foldl(#MEnv{env, handlers, parent, level})(vfn)(vinit)(vlst)
+      #Len: λ&lst.
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_length(vlst)
+      #Apnd: λ&a. λ&b.
+        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
+        @purple_list_append(va)(vb)
+      #Rev: λ&lst.
+        !!&vlst = @purple_evalc(#MEnv{env, handlers, parent, level})(lst);
+        @purple_list_reverse(vlst)
+      // Higher-order function utilities
+      #Comp: λ&f. λ&g.
+        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
+        !!&vg = @purple_evalc(#MEnv{env, handlers, parent, level})(g);
+        @purple_compose(#MEnv{env, handlers, parent, level})(vf)(vg)
+      #Flip: λ&f.
+        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
+        @purple_flip(#MEnv{env, handlers, parent, level})(vf)
+      #Appl: λ&f. λ&args.
+        !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
+        !!&vargs = @purple_evalc(#MEnv{env, handlers, parent, level})(args);
+        @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
+
+// =============================================================================
+// Quasiquote Processing
+// =============================================================================
+
+// Process a quasiquoted expression - converts to code representation
+// When encountering #UQ{e}, evaluate e and splice the result
+// When encountering #UQS{e} in a list context, evaluate e and splice elements
+@purple_qq_process = λmenv. λ&eval_fn. λexp.
+  !!&m = menv; !!&evf = eval_fn; %e = exp;
+  λ{
+    // Unquote: evaluate and splice result
+    // If result is #Cod{e}, unwrap to e (for macro expansion)
+    #UQ: λ&inner.
+      !!&v = evf(m)(inner);
+      // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
+      λ{#Cod: λ&code. code; λ&u. v}(v)
+    // Unquote-splicing outside list context is an error
+    #UQS: λ&inner.
+      @pink_err(#uqs)
+    // Literals become code literals
+    #Lit: λ&n. #Lit{n}
+    // Symbols become code symbols
+    #Sym: λ&s. #Sym{s}
+    // Characters become code characters
+    #CHR: λ&c. #CHR{c}
+    // Nil becomes code nil
+    #NIL: #NIL
+    // Cons cells: handle UQS in the head position for splicing
+    #CON: λ&a. λ&b.
+      @purple_qq_cons(m)(evf)(a)(b)
+    // Variables become code variables
+    #Var: λ&n. #Var{n}
+    // Lambda: process body
+    #Lam: λ&body. #Lam{@purple_qq_process(m)(evf)(body)}
+    // Application: process both sides
+    #App: λ&f. λ&x.
+      #App{@purple_qq_process(m)(evf)(f), @purple_qq_process(m)(evf)(x)}
+    // Let: process value and body
+    #Let: λ&val. λ&body.
+      #Let{@purple_qq_process(m)(evf)(val), @purple_qq_process(m)(evf)(body)}
+    // If: process all branches
+    #If: λ&c. λ&t. λ&e.
+      #If{@purple_qq_process(m)(evf)(c), @purple_qq_process(m)(evf)(t), @purple_qq_process(m)(evf)(e)}
+    // Arithmetic operations
+    #Add: λ&a. λ&b.
+      #Add{@purple_qq_process(m)(evf)(a), @purple_qq_process(m)(evf)(b)}
+    #Sub: λ&a. λ&b.
+      #Sub{@purple_qq_process(m)(evf)(a), @purple_qq_process(m)(evf)(b)}
+    #Mul: λ&a. λ&b.
+      #Mul{@purple_qq_process(m)(evf)(a), @purple_qq_process(m)(evf)(b)}
+    #Eql: λ&a. λ&b.
+      #Eql{@purple_qq_process(m)(evf)(a), @purple_qq_process(m)(evf)(b)}
+    // Nested quasiquote: process recursively (increment depth would be proper, but simplified here)
+    #QQ: λ&inner. #QQ{@purple_qq_process(m)(evf)(inner)}
+    // Default: return as-is (for unknown constructs)
+    _ : e
+  }(e)
+
+// Process cons cell in quasiquote context, handling UQS splicing
+// UQS can appear in head position (splice into list) or tail position (becomes tail)
+@purple_qq_cons = λmenv. λ&eval_fn. λhead. λtail.
+  !!&m = menv; !!&evf = eval_fn; !!&h = head; !!&t = tail;
+  λ{
+    // Unquote-splicing in head position: evaluate and splice list elements
+    #UQS: λ&inner.
+      !!&lst = evf(m)(inner);
+      !!&processed_tail = @purple_qq_process_tail(m)(evf)(t);
+      @purple_qq_splice(lst)(processed_tail)
+    // Regular head: process head, then check tail for UQS
+    _ : λ&u.
+      !!&processed_head = @purple_qq_process(m)(evf)(h);
+      !!&processed_tail = @purple_qq_process_tail(m)(evf)(t);
+      #CON{processed_head, processed_tail}
+  }(h)
+
+// Process tail of a cons cell, handling UQS specially
+// When tail is UQS{expr}, evaluate expr and use as tail directly
+@purple_qq_process_tail = λmenv. λ&eval_fn. λtail.
+  !!&m = menv; !!&evf = eval_fn; %t = tail;
+  λ{
+    // Unquote-splicing in tail position: evaluate and use as tail
+    #UQS: λ&inner.
+      evf(m)(inner)
+    // Regular tail: process normally
+    _ : λ&u.
+      @purple_qq_process(m)(evf)(t)
+  }(t)
+
+// Splice a list into a tail
+@purple_qq_splice = λlst. λtail.
+  %l = lst; %t = tail;
+  λ{
+    #NIL: t
+    #CON: λ&h. λ&rest. #CON{h, @purple_qq_splice(rest)(t)}
+    _ : @pink_err(#spli)
+  }(l)
+
+// =============================================================================
+// List Operations
+// =============================================================================
+
+// Map: apply function to each element
+@purple_list_map = λmenv. λ&fn. λlst.
+  !!&m = menv; %l = lst;
+  λ{
+    #NIL: #NIL
+    #CON: λ&h. λ&t.
+      !!&vh = @purple_apply_menv(m)(@purple_eval)(fn)(h);
+      !!&vt = @purple_list_map(m)(fn)(t);
+      #CON{vh, vt}
+    _ : @pink_err(#map)
+  }(l)
+
+// Filter: keep elements where predicate returns non-zero
+@purple_list_filter = λmenv. λ&fn. λlst.
+  !!&m = menv; %l = lst;
+  λ{
+    #NIL: #NIL
+    #CON: λ&h. λ&t.
+      !!&test = @purple_apply_menv(m)(@purple_eval)(fn)(h);
+      !!&rest = @purple_list_filter(m)(fn)(t);
+      λ{
+        #Cst: λ&n. λ{0: rest; λ&u. #CON{h, rest}}(n)
+        _ : @pink_err(#fltr)
+      }(test)
+    _ : @pink_err(#fltr)
+  }(l)
+
+// Foldr: right fold - f a (f b (f c init))
+@purple_list_foldr = λmenv. λ&fn. λinit. λlst.
+  !!&m = menv; %i = init; %l = lst;
+  λ{
+    #NIL: i
+    #CON: λ&h. λ&t.
+      !!&rest = @purple_list_foldr(m)(fn)(i)(t);
+      @purple_apply2(m)(@purple_eval)(fn)(h)(rest)
+    _ : @pink_err(#fold)
+  }(l)
+
+// Foldl: left fold - f (f (f init a) b) c
+@purple_list_foldl = λmenv. λ&fn. λacc. λlst.
+  !!&m = menv; %a = acc; %l = lst;
+  λ{
+    #NIL: a
+    #CON: λ&h. λ&t.
+      !!&new_acc = @purple_apply2(m)(@purple_eval)(fn)(a)(h);
+      @purple_list_foldl(m)(fn)(new_acc)(t)
+    _ : @pink_err(#fdlf)
+  }(l)
+
+// Apply function with two arguments
+@purple_apply2 = λm. λ&evf. λ&fn. λa. λb.
+  !!&menv = m; !!&f1 = fn; !!&arg1 = a; !!&arg2 = b;
+  !!&partial = @purple_apply_menv(menv)(evf)(f1)(arg1);
+  @purple_apply_menv(menv)(evf)(partial)(arg2)
+
+// Length: count elements
+@purple_list_length = λlst.
+  %l = lst;
+  λ{
+    #NIL: #Cst{0}
+    #CON: λ&h. λ&t.
+      !!&rest_len = @purple_list_length(t);
+      λ{#Cst: λ&n. #Cst{(n + 1)}; _ : @pink_err(#len)}(rest_len)
+    _ : @pink_err(#len)
+  }(l)
+
+// Append: concatenate two lists
+@purple_list_append = λa. λb.
+  %l1 = a; %l2 = b;
+  λ{
+    #NIL: l2
+    #CON: λ&h. λ&t. #CON{h, @purple_list_append(t)(l2)}
+    _ : @pink_err(#apnd)
+  }(l1)
+
+// Reverse: reverse a list
+@purple_list_reverse = λlst.
+  @purple_list_reverse_acc(lst)(#NIL)
+
+@purple_list_reverse_acc = λlst. λacc.
+  %l = lst; %a = acc;
+  λ{
+    #NIL: a
+    #CON: λ&h. λ&t. @purple_list_reverse_acc(t)(#CON{h, a})
+    _ : @pink_err(#rev)
+  }(l)
+
+// =============================================================================
+// Higher-Order Function Utilities
+// =============================================================================
+
+// Compose: (compose f g) returns a closure that when applied to x gives f(g(x))
+@purple_compose = λmenv. λ&vf. λ&vg.
+  // Return a closure that captures f and g
+  // Env: #CON{f, #CON{g, #NIL}}
+  // When applied to x: env becomes #CON{x, #CON{f, #CON{g, #NIL}}}
+  // #Var{0} = x, #Var{1} = f, #Var{2} = g
+  // Body: f(g(x)) = #App{#Var{1}, #App{#Var{2}, #Var{0}}}
+  #Clo{#CON{vf, #CON{vg, #NIL}}, #App{#Var{1}, #App{#Var{2}, #Var{0}}}}
+
+// Flip: (flip f) returns a function with swapped argument order
+// (flip f x y) = (f y x)
+@purple_flip = λmenv. λ&vf.
+  // Return a closure that captures f
+  // Env: #CON{f, #NIL}
+  // When applied to x: env becomes #CON{x, #CON{f, #NIL}}
+  // #Var{0} = x, #Var{1} = f
+  // Body is a lambda: λy. (f y x)
+  // When that lambda is applied to y: #CON{y, #CON{x, #CON{f, #NIL}}}
+  // #Var{0} = y, #Var{1} = x, #Var{2} = f
+  // Inner body: ((f y) x) = #App{#App{#Var{2}, #Var{0}}, #Var{1}}
+  #Clo{#CON{vf, #NIL}, #Lam{#App{#App{#Var{2}, #Var{0}}, #Var{1}}}}
+
+// Apply: apply a function to a list of arguments
+// (apply f '(a b c)) = (((f a) b) c)
+@purple_apply_to_list = λmenv. λ&func. λargs.
+  !!&m = menv; %f = func; %l = args;
+  λ{
+    #NIL: f
+    #CON: λ&h. λ&t.
+      !!&applied = @purple_apply_menv(m)(@purple_eval)(f)(h);
+      @purple_apply_to_list(m)(applied)(t)
+    _ : @pink_err(#appl)
+  }(l)
 
 @purple_unwrap = λ&v.
   λ{
@@ -1262,6 +1803,13 @@
     #MEnv: λ&e.λ&h.λ&p.λ&l. #MEnv{e, h, p, l}
     #FFI: λ&name. λ&args. #FFI{name, @purple_unwrap_list(args)}
     #Do: λ&first. λ&rest. #Do{@purple_unwrap(first), @purple_unwrap(rest)}
+    #DefH: λ&n. λ&a. #DefH{@purple_unwrap(n), @purple_unwrap(a)}
+    #ErrR: λ&m. #ErrR{@purple_unwrap(m)}
+    #Err: λ&m. #Err{@purple_unwrap(m)}
+    #Try: λ&e. λ&h. #Try{@purple_unwrap(e), @purple_unwrap(h)}
+    #Asrt: λ&c. λ&m. #Asrt{@purple_unwrap(c), @purple_unwrap(m)}
+    #Trce: λ&e. #Trce{@purple_unwrap(e)}
+    #Traced: λ&v. #Traced{@purple_unwrap(v)}
     // AST nodes that may appear in unevaluated code (for FFI continuations)
     #Lit: λ&n. #Lit{n}
     #Var: λ&n. #Var{n}

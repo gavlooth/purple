@@ -1,0 +1,4 @@
+; Test 'unless' macro - evaluates body if condition is false
+(defmacro unless (cond body)
+  `(if ,cond 0 ,body)
+  (+ (mcall unless (> 5 1) 10) (mcall unless (> 1 5) 20)))

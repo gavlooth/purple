@@ -1,0 +1,3 @@
+; Test try/catch: no error returns the value
+(try (+ 10 20)
+     (lambda (e) 999))

@@ -1,0 +1,2 @@
+; Test append - combine two lists
+(append (cons 1 (cons 2 (nil))) (cons 3 (cons 4 (nil))))

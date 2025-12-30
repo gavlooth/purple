@@ -1,0 +1,4 @@
+; Test flip - swap argument order
+; (flip f x y) = f y x
+(let (sub (lambda (a) (lambda (b) (- a b))))
+  (((flip sub) 10) 30))

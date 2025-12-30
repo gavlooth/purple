@@ -1,0 +1,2 @@
+; Test fold (foldr) - sum elements
+(fold (lambda (x) (lambda (acc) (+ x acc))) 0 (cons 1 (cons 2 (cons 3 (nil)))))

@@ -64,6 +64,8 @@ static u32 PURPLEC_NAM_PCTR;
 static u32 PURPLEC_NAM_PLIT;
 static u32 PURPLEC_NAM_PWLD;
 static u32 PURPLEC_NAM_PVAR;
+static u32 PURPLEC_NAM_POR;
+static u32 PURPLEC_NAM_PAS;
 static u32 PURPLEC_NAM_CASE;
 // Lowercase variants (source syntax)
 static u32 PURPLEC_NAM_con;
@@ -82,6 +84,24 @@ static u32 PURPLEC_NAM_Let;
 static u32 PURPLEC_NAM_If;
 static u32 PURPLEC_NAM_Cod;
 static u32 PURPLEC_NAM_Clo;
+static u32 PURPLEC_NAM_QQ;
+static u32 PURPLEC_NAM_UQ;
+static u32 PURPLEC_NAM_UQS;
+// List operations
+static u32 PURPLEC_NAM_MAP;
+static u32 PURPLEC_NAM_FLTR;
+static u32 PURPLEC_NAM_FOLD;
+static u32 PURPLEC_NAM_FOLDL;
+static u32 PURPLEC_NAM_LEN;
+static u32 PURPLEC_NAM_APND;
+static u32 PURPLEC_NAM_REV;
+// Higher-order function utilities
+static u32 PURPLEC_NAM_COMP;
+static u32 PURPLEC_NAM_FLIP;
+static u32 PURPLEC_NAM_APPL;
+// Macro system
+static u32 PURPLEC_NAM_DEFMAC;
+static u32 PURPLEC_NAM_MACEXP;
 static int PURPLEC_NAMES_READY = 0;
 
 fn void purplec_names_init(void) {
@@ -94,6 +114,8 @@ fn void purplec_names_init(void) {
   PURPLEC_NAM_PLIT = purple_nick("PLit");
   PURPLEC_NAM_PWLD = purple_nick("PWld");
   PURPLEC_NAM_PVAR = purple_nick("PVar");
+  PURPLEC_NAM_POR  = purple_nick("POr");
+  PURPLEC_NAM_PAS  = purple_nick("PAs");
   PURPLEC_NAM_CASE = purple_nick("Case");
   // Lowercase variants
   PURPLEC_NAM_con  = purple_nick("cons");
@@ -112,6 +134,24 @@ fn void purplec_names_init(void) {
   PURPLEC_NAM_If   = purple_nick("If");
   PURPLEC_NAM_Cod  = purple_nick("Cod");
   PURPLEC_NAM_Clo  = purple_nick("Clo");
+  PURPLEC_NAM_QQ   = purple_nick("QQ");
+  PURPLEC_NAM_UQ   = purple_nick("UQ");
+  PURPLEC_NAM_UQS  = purple_nick("UQS");
+  // List operations
+  PURPLEC_NAM_MAP   = purple_nick("Map");
+  PURPLEC_NAM_FLTR  = purple_nick("Fltr");
+  PURPLEC_NAM_FOLD  = purple_nick("Fold");
+  PURPLEC_NAM_FOLDL = purple_nick("FdLf");
+  PURPLEC_NAM_LEN   = purple_nick("Len");
+  PURPLEC_NAM_APND  = purple_nick("Apnd");
+  PURPLEC_NAM_REV   = purple_nick("Rev");
+  // Higher-order function utilities
+  PURPLEC_NAM_COMP  = purple_nick("Comp");
+  PURPLEC_NAM_FLIP  = purple_nick("Flip");
+  PURPLEC_NAM_APPL  = purple_nick("Appl");
+  // Macro system
+  PURPLEC_NAM_DEFMAC = purple_nick("DMac");
+  PURPLEC_NAM_MACEXP = purple_nick("MExp");
   PURPLEC_NAMES_READY = 1;
 }
 
@@ -271,7 +311,17 @@ fn int purple_match_needs_runtime(Term cases) {
       if (nam == PURPLEC_NAM_NIL) break;
       if (nam == PURPLEC_NAM_CON && purple_ctr_arity(curr) == 2) {
         Term case_term = purple_ctr_arg(curr, 0);
-        if (term_tag(case_term) >= C00 && term_ext(case_term) == PURPLEC_NAM_CASE) {
+        // Case now has 3 args: pattern, guard, body
+        if (term_tag(case_term) >= C00 && term_ext(case_term) == PURPLEC_NAM_CASE && purple_ctr_arity(case_term) == 3) {
+          // Check if case has a guard (guard is not #NIL)
+          Term guard = purple_ctr_arg(case_term, 1);
+          if (term_tag(guard) >= C00) {
+            u32 guard_nam = term_ext(guard);
+            if (guard_nam != PURPLEC_NAM_NIL) {
+              // Has a guard - needs runtime for guard evaluation
+              return 1;
+            }
+          }
           Term pattern = purple_ctr_arg(case_term, 0);
           u8 ptag = term_tag(pattern);
           if (ptag >= C00 && ptag <= C16) {
@@ -280,6 +330,10 @@ fn int purple_match_needs_runtime(Term cases) {
             if (pnam == PURPLEC_NAM_PLIT) return 1;
             // Variable patterns need runtime (for proper binding)
             if (pnam == PURPLEC_NAM_PVAR) return 1;
+            // Or-patterns need runtime
+            if (pnam == PURPLEC_NAM_POR) return 1;
+            // As-patterns need runtime
+            if (pnam == PURPLEC_NAM_PAS) return 1;
             // Wildcard pattern
             if (pnam == PURPLEC_NAM_PWLD) has_wildcard = 1;
             // Constructor patterns
@@ -798,11 +852,14 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
     // Keep these for potential runtime use (not commonly needed now)
-    if (nam == PURPLE_NAM_CASE && ari == 2) {
+    // Case now has 3 args: pattern, guard, body
+    if (nam == PURPLE_NAM_CASE && ari == 3) {
       fputs("#Case{", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 0));
       fputs(", ", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));
       fputc('}', e->out);
       return;
     }
@@ -830,6 +887,139 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    if (nam == PURPLEC_NAM_POR && ari == 1) {
+      fputs("#POr{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_PAS && ari == 2) {
+      fputs("#PAs{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    // Quasiquote: #QQ{expr}
+    if (nam == PURPLEC_NAM_QQ && ari == 1) {
+      fputs("#QQ{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    // Unquote: #UQ{expr}
+    if (nam == PURPLEC_NAM_UQ && ari == 1) {
+      fputs("#UQ{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    // Unquote-splicing: #UQS{expr}
+    if (nam == PURPLEC_NAM_UQS && ari == 1) {
+      fputs("#UQS{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
+    // List operations
+    if (nam == PURPLEC_NAM_MAP && ari == 2) {
+      fputs("#Map{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_FLTR && ari == 2) {
+      fputs("#Fltr{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_FOLD && ari == 3) {
+      fputs("#Fold{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_FOLDL && ari == 3) {
+      fputs("#FdLf{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_LEN && ari == 1) {
+      fputs("#Len{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_APND && ari == 2) {
+      fputs("#Apnd{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_REV && ari == 1) {
+      fputs("#Rev{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    // Higher-order function utilities
+    if (nam == PURPLEC_NAM_COMP && ari == 2) {
+      fputs("#Comp{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_FLIP && ari == 1) {
+      fputs("#Flip{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_APPL && ari == 2) {
+      fputs("#Appl{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+    // Macro system
+    if (nam == PURPLEC_NAM_DEFMAC && ari == 3) {
+      fputs("#DMac{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));  // name
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));  // params
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));  // body
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLEC_NAM_MACEXP && ari == 1) {
+      fputs("#MExp{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
 
     // FFI call: #FFI{name, args}
     if (nam == PURPLE_NAM_FFI && ari == 2) {
@@ -851,6 +1041,52 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Default handler: #DefH{name, arg} -> call default handler by symbol name
+    if (nam == PURPLE_NAM_DEFH && ari == 2) {
+      fputs("#DefH{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
+    // Error: #ErrR{msg} -> raise an error
+    if (nam == PURPLE_NAM_ERRR && ari == 1) {
+      fputs("#ErrR{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
+    // Try: #Try{expr, handler} -> try/catch error handling
+    if (nam == PURPLE_NAM_TRY && ari == 2) {
+      fputs("#Try{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
+    // Assert: #Asrt{cond, msg} -> assert condition or raise error
+    if (nam == PURPLE_NAM_ASRT && ari == 2) {
+      fputs("#Asrt{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
+
+    // Trace: #Trce{expr} -> trace and return value
+    if (nam == PURPLE_NAM_TRCE && ari == 1) {
+      fputs("#Trce{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+
     // Unknown constructor - emit generically
     fprintf(e->out, "#?%u{", nam);
     for (u32 i = 0; i < ari; i++) {
@@ -868,6 +1104,7 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
 }
 
 fn void purple_compile_emit(FILE *out, Term ast) {
+  purplec_names_init();
   PurpleEmit e = { .out = out };
   purple_env_init(&e);
   purple_compile_emit_term(&e, ast);

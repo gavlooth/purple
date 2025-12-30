@@ -1,0 +1,2 @@
+; Test foldl - sum elements left-to-right
+(foldl (lambda (acc) (lambda (x) (+ acc x))) 0 (cons 1 (cons 2 (cons 3 (nil)))))

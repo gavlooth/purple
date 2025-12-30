@@ -1,0 +1,7 @@
+; Test handler delegation with default-handler
+; Custom lit handler that adds 100 to the result of default lit
+(with-menv
+  (set-meta! 'lit
+    (lambda (x)
+      (+ 100 (default-handler 'lit x))))
+  (+ 10 20))

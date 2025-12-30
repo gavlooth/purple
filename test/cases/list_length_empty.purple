@@ -1,0 +1,2 @@
+; Test length on empty list
+(length (nil))

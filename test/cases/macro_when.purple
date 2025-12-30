@@ -1,0 +1,4 @@
+; Test 'when' macro - evaluates body if condition is true, otherwise 0
+(defmacro when (cond body)
+  `(if ,cond ,body 0)
+  (+ (mcall when (> 5 1) 10) (mcall when (> 1 5) 20)))

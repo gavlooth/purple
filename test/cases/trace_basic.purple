@@ -1,0 +1,2 @@
+; Test trace: evaluates and wraps in #Traced
+(trace (+ 1 2))

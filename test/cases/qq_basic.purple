@@ -1,0 +1,2 @@
+; Basic quasiquote - returns literal
+`42

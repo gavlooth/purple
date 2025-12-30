@@ -64,9 +64,40 @@ static u32 PURPLE_NAM_PCTR; // Pattern: constructor
 static u32 PURPLE_NAM_PLIT; // Pattern: literal
 static u32 PURPLE_NAM_PWLD; // Pattern: wildcard
 static u32 PURPLE_NAM_PVAR; // Pattern: variable (for nested)
+static u32 PURPLE_NAM_POR;  // Pattern: or-pattern (alternatives)
+static u32 PURPLE_NAM_PAS;  // Pattern: as-pattern (bind name and subpattern)
 static u32 PURPLE_NAM_FFI;  // Foreign function call
 static u32 PURPLE_NAM_DO;   // IO sequencing
 static u32 PURPLE_NAM_MOV;  // Move binding (multi-use without dup)
+static u32 PURPLE_NAM_QQ;   // Quasiquote
+static u32 PURPLE_NAM_UQ;   // Unquote
+static u32 PURPLE_NAM_UQS;  // Unquote-splicing
+// List operations
+static u32 PURPLE_NAM_MAP;    // map
+static u32 PURPLE_NAM_FLTR;   // filter
+static u32 PURPLE_NAM_FOLD;   // fold
+static u32 PURPLE_NAM_FOLDL;  // foldl (left fold)
+static u32 PURPLE_NAM_LEN;    // length
+static u32 PURPLE_NAM_APND;   // append
+static u32 PURPLE_NAM_REV;    // reverse
+
+// Higher-order function utilities
+static u32 PURPLE_NAM_COMP;   // compose
+static u32 PURPLE_NAM_FLIP;   // flip
+static u32 PURPLE_NAM_APPL;   // apply (to list of args)
+
+// Macro system
+static u32 PURPLE_NAM_DEFMAC; // defmacro
+static u32 PURPLE_NAM_MACEXP; // macroexpand
+
+// Handler delegation
+static u32 PURPLE_NAM_DEFH;   // DefH (default-handler)
+
+// Error handling
+static u32 PURPLE_NAM_ERRR;   // ErrR (error - raise error)
+static u32 PURPLE_NAM_TRY;    // Try (try expr handler)
+static u32 PURPLE_NAM_ASRT;   // Asrt (assert condition msg)
+static u32 PURPLE_NAM_TRCE;   // Trce (trace expr)
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -130,9 +161,36 @@ fn void purple_names_init(void) {
   PURPLE_NAM_PLIT  = purple_nick("PLit");
   PURPLE_NAM_PWLD  = purple_nick("PWld");
   PURPLE_NAM_PVAR  = purple_nick("PVar");
+  PURPLE_NAM_POR   = purple_nick("POr");
+  PURPLE_NAM_PAS   = purple_nick("PAs");
   PURPLE_NAM_FFI   = purple_nick("FFI");
   PURPLE_NAM_DO    = purple_nick("Do");
   PURPLE_NAM_MOV   = purple_nick("Mov");
+  PURPLE_NAM_QQ    = purple_nick("QQ");
+  PURPLE_NAM_UQ    = purple_nick("UQ");
+  PURPLE_NAM_UQS   = purple_nick("UQS");
+  // List operations
+  PURPLE_NAM_MAP   = purple_nick("Map");
+  PURPLE_NAM_FLTR  = purple_nick("Fltr");
+  PURPLE_NAM_FOLD  = purple_nick("Fold");
+  PURPLE_NAM_FOLDL = purple_nick("FdLf");
+  PURPLE_NAM_LEN   = purple_nick("Len");
+  PURPLE_NAM_APND  = purple_nick("Apnd");
+  PURPLE_NAM_REV   = purple_nick("Rev");
+  // Higher-order function utilities
+  PURPLE_NAM_COMP  = purple_nick("Comp");
+  PURPLE_NAM_FLIP  = purple_nick("Flip");
+  PURPLE_NAM_APPL  = purple_nick("Appl");
+  // Macro system
+  PURPLE_NAM_DEFMAC = purple_nick("DMac");
+  PURPLE_NAM_MACEXP = purple_nick("MExp");
+  // Handler delegation
+  PURPLE_NAM_DEFH   = purple_nick("DefH");
+  // Error handling
+  PURPLE_NAM_ERRR   = purple_nick("ErrR");
+  PURPLE_NAM_TRY    = purple_nick("Try");
+  PURPLE_NAM_ASRT   = purple_nick("Asrt");
+  PURPLE_NAM_TRCE   = purple_nick("Trce");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -423,6 +481,97 @@ fn Term purple_term_smta(Term key, Term val) {
   return purple_ctr2(PURPLE_NAM_SMTA, key, val);
 }
 
+// Quasiquote: `expr
+fn Term purple_term_qq(Term expr) {
+  return purple_ctr1(PURPLE_NAM_QQ, expr);
+}
+
+// Unquote: ,expr
+fn Term purple_term_uq(Term expr) {
+  return purple_ctr1(PURPLE_NAM_UQ, expr);
+}
+
+// Unquote-splicing: ,@expr
+fn Term purple_term_uqs(Term expr) {
+  return purple_ctr1(PURPLE_NAM_UQS, expr);
+}
+
+// List operations
+fn Term purple_term_map(Term func, Term lst) {
+  return purple_ctr2(PURPLE_NAM_MAP, func, lst);
+}
+
+fn Term purple_term_filter(Term func, Term lst) {
+  return purple_ctr2(PURPLE_NAM_FLTR, func, lst);
+}
+
+fn Term purple_term_fold(Term func, Term init, Term lst) {
+  return purple_ctr3(PURPLE_NAM_FOLD, func, init, lst);
+}
+
+fn Term purple_term_foldl(Term func, Term init, Term lst) {
+  return purple_ctr3(PURPLE_NAM_FOLDL, func, init, lst);
+}
+
+fn Term purple_term_length(Term lst) {
+  return purple_ctr1(PURPLE_NAM_LEN, lst);
+}
+
+fn Term purple_term_append(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_APND, a, b);
+}
+
+fn Term purple_term_reverse(Term lst) {
+  return purple_ctr1(PURPLE_NAM_REV, lst);
+}
+
+// Higher-order function utilities
+fn Term purple_term_compose(Term f, Term g) {
+  return purple_ctr2(PURPLE_NAM_COMP, f, g);
+}
+
+fn Term purple_term_flip(Term f) {
+  return purple_ctr1(PURPLE_NAM_FLIP, f);
+}
+
+fn Term purple_term_apply_list(Term func, Term args) {
+  return purple_ctr2(PURPLE_NAM_APPL, func, args);
+}
+
+// Macro system
+fn Term purple_term_defmacro(Term name, Term params, Term body) {
+  return purple_ctr3(PURPLE_NAM_DEFMAC, name, params, body);
+}
+
+fn Term purple_term_macroexpand(Term expr) {
+  return purple_ctr1(PURPLE_NAM_MACEXP, expr);
+}
+
+// Handler delegation: (default-handler 'name arg) -> calls default handler
+fn Term purple_term_defh(Term name, Term arg) {
+  return purple_ctr2(PURPLE_NAM_DEFH, name, arg);
+}
+
+// Error: (error msg) -> raises an error
+fn Term purple_term_err(Term msg) {
+  return purple_ctr1(PURPLE_NAM_ERRR, msg);
+}
+
+// Try: (try expr handler) -> catch errors with handler lambda
+fn Term purple_term_try(Term expr, Term handler) {
+  return purple_ctr2(PURPLE_NAM_TRY, expr, handler);
+}
+
+// Assert: (assert cond msg) -> error if cond is false
+fn Term purple_term_assert(Term cond, Term msg) {
+  return purple_ctr2(PURPLE_NAM_ASRT, cond, msg);
+}
+
+// Trace: (trace expr) -> evaluates and returns #Traced{value}
+fn Term purple_term_trace(Term expr) {
+  return purple_ctr1(PURPLE_NAM_TRCE, expr);
+}
+
 fn Term purple_term_seq(Term a, Term b) {
   return purple_ctr2(PURPLE_NAM_SEQ, a, b);
 }
@@ -457,8 +606,9 @@ fn Term purple_term_mat(Term expr, Term cases) {
   return purple_ctr2(PURPLE_NAM_MAT, expr, cases);
 }
 
-fn Term purple_term_case(Term pattern, Term body) {
-  return purple_ctr2(PURPLE_NAM_CASE, pattern, body);
+// #Case{pattern, guard, body} - guard can be #NIL for no guard
+fn Term purple_term_case(Term pattern, Term guard, Term body) {
+  return purple_ctr3(PURPLE_NAM_CASE, pattern, guard, body);
 }
 
 // #PCtr{tag_sym, args_list} - constructor pattern
@@ -479,6 +629,16 @@ fn Term purple_term_pwld(void) {
 // #PVar{name} - variable pattern (binds a name)
 fn Term purple_term_pvar(u32 name) {
   return purple_ctr1(PURPLE_NAM_PVAR, term_new_num(name));
+}
+
+// #POr{alternatives} - or-pattern (list of alternative patterns)
+fn Term purple_term_por(Term alternatives) {
+  return purple_ctr1(PURPLE_NAM_POR, alternatives);
+}
+
+// #PAs{name, subpattern} - as-pattern (bind name and match subpattern)
+fn Term purple_term_pas(Term name, Term subpattern) {
+  return purple_ctr2(PURPLE_NAM_PAS, name, subpattern);
 }
 
 // #FFI{name, args} - foreign function call
@@ -705,6 +865,100 @@ fn Term purple_parse_letrec(PState *s) {
   return purple_term_let(lam_body, expr);
 }
 
+// defmacro: (defmacro name (params...) body expr)
+// Defines a macro transformer and evaluates expr with it available
+// The macro takes quoted syntax arguments and returns new syntax
+// Usage: (eval (macro-name (quote arg1) (quote arg2)))
+fn Term purple_parse_defmacro(PState *s) {
+  purple_skip(s);
+  // Parse macro name
+  u32 name_start = 0;
+  u32 name_len = 0;
+  if (!purple_parse_symbol_token(s, &name_start, &name_len)) {
+    parse_error(s, "macro name", parse_peek(s));
+  }
+  u32 name_id = table_find(s->src + name_start, name_len);
+
+  // Parse params list
+  purple_skip(s);
+  parse_consume(s, "(");
+
+  u32 params[256];
+  u32 count = 0;
+  while (1) {
+    purple_skip(s);
+    if (parse_match(s, ")")) {
+      break;
+    }
+    u32 start = 0;
+    u32 len = 0;
+    if (!purple_parse_symbol_token(s, &start, &len)) {
+      parse_error(s, "parameter name", parse_peek(s));
+    }
+    if (count >= 256) {
+      fprintf(stderr, "PURPLE_ERROR: too many macro parameters\n");
+      exit(1);
+    }
+    params[count++] = table_find(s->src + start, len);
+  }
+
+  // Push params onto binding stack (for body parsing)
+  for (u32 i = 0; i < count; i++) {
+    purple_bind_push(params[i]);
+  }
+
+  // Parse macro body (the transformer)
+  Term body = parse_purple_form(s);
+  purple_bind_pop(count);
+
+  // Build lambda for macro transformer
+  // Wrap body in nested lambdas for each param
+  Term transformer = body;
+  for (u32 i = count; i > 0; i--) {
+    transformer = purple_term_lam(transformer);
+  }
+
+  // Now parse the expression where macro is used
+  purple_bind_push(name_id);  // macro name is bound
+  Term expr = parse_purple_form(s);
+  purple_bind_pop(1);
+
+  parse_consume(s, ")");
+
+  // Return let binding: (let (name transformer) expr)
+  return purple_term_let(transformer, expr);
+}
+
+// mcall: (mcall macro-name arg1 arg2 ...)
+// Calls a macro by quoting args and evaluating the result
+// Transforms to: (eval (mac (quote arg1) (quote arg2) ...))
+fn Term purple_parse_mcall(PState *s) {
+  // Parse macro expression
+  Term mac = parse_purple_form(s);
+
+  // Parse args and quote each one
+  purple_skip(s);
+  Term app = mac;
+  while (!parse_match(s, ")")) {
+    Term arg = parse_purple_form(s);
+    // Quote the arg: #Cod{arg}
+    Term quoted = purple_term_cod(arg);
+    // Apply: (mac quoted-arg)
+    app = purple_term_app(app, quoted);
+    purple_skip(s);
+  }
+
+  // Wrap in eval
+  return purple_term_eval(app);
+}
+
+// macroexpand: (macroexpand expr) - expand macros in expr without evaluating
+fn Term purple_parse_macroexpand(PState *s) {
+  Term expr = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_macroexpand(expr);
+}
+
 fn Term purple_parse_if(PState *s) {
   Term cond = parse_purple_form(s);
   Term tval = parse_purple_form(s);
@@ -794,6 +1048,44 @@ fn Term purple_parse_setmeta(PState *s) {
   return purple_term_smta(key, val);
 }
 
+// (default-handler 'name arg) -> call default handler by name
+fn Term purple_parse_defh(PState *s) {
+  Term name = parse_purple_form(s);
+  Term arg = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_defh(name, arg);
+}
+
+// (error msg) -> raise an error
+fn Term purple_parse_error(PState *s) {
+  Term msg = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_err(msg);
+}
+
+// (try expr handler) -> catch errors with handler
+fn Term purple_parse_try(PState *s) {
+  Term expr = parse_purple_form(s);
+  Term handler = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_try(expr, handler);
+}
+
+// (assert cond msg) -> raise error if cond is false
+fn Term purple_parse_assert(PState *s) {
+  Term cond = parse_purple_form(s);
+  Term msg = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_assert(cond, msg);
+}
+
+// (trace expr) -> evaluate and return #Traced{value}
+fn Term purple_parse_trace(PState *s) {
+  Term expr = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_trace(expr);
+}
+
 fn Term purple_parse_symeq(PState *s) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
@@ -861,18 +1153,72 @@ fn Term purple_parse_pattern(PState *s) {
     return purple_term_plit(term_new_num(n));
   }
 
-  // Constructor pattern: (Tag arg1 arg2 ...)
+  // Constructor, grouped pattern, or-pattern: (Tag arg1 arg2 ...) or (var) or (or pat1 pat2 ...)
+  // If first symbol is lowercase and followed by ), treat as variable pattern
+  // If first symbol is "or", treat as or-pattern
+  // Otherwise, treat as constructor pattern
   if (c == '(') {
     parse_advance(s);
     purple_skip(s);
 
-    // Get constructor name
+    // Get first symbol
     u32 tag_start = 0;
     u32 tag_len = 0;
     if (!purple_parse_symbol_token(s, &tag_start, &tag_len)) {
-      parse_error(s, "constructor name", parse_peek(s));
+      parse_error(s, "constructor name or variable", parse_peek(s));
     }
 
+    // Check if it's an or-pattern: (or pat1 pat2 ...)
+    if (purple_symbol_is(s, tag_start, tag_len, "or")) {
+      // Parse alternative patterns
+      Term or_patterns[16];
+      u32 or_count = 0;
+      purple_skip(s);
+      while (!parse_match(s, ")")) {
+        if (or_count >= 16) {
+          fprintf(stderr, "PURPLE_ERROR: too many or-pattern alternatives\n");
+          exit(1);
+        }
+        or_patterns[or_count++] = purple_parse_pattern(s);
+        purple_skip(s);
+      }
+      if (or_count == 0) {
+        fprintf(stderr, "PURPLE_ERROR: or-pattern requires at least one alternative\n");
+        exit(1);
+      }
+      // Build list of alternatives
+      Term alts = purple_term_nil();
+      for (int i = (int)or_count - 1; i >= 0; i--) {
+        alts = purple_term_con(or_patterns[i], alts);
+      }
+      return purple_term_por(alts);
+    }
+
+    // Check if it's a lowercase-starting symbol (potential variable)
+    char first_char = s->src[tag_start];
+    int is_lowercase_start = (first_char >= 'a' && first_char <= 'z');
+
+    // Look ahead to see if this is immediately followed by )
+    purple_skip(s);
+    if (is_lowercase_start && parse_peek(s) == ')') {
+      // It's (var) - a variable pattern with optional grouping parens
+      parse_advance(s); // consume )
+      u32 name = table_find(s->src + tag_start, tag_len);
+      return purple_term_pvar(name);
+    }
+
+    // Check for as-pattern: (name @ subpattern)
+    if (is_lowercase_start && parse_peek(s) == '@') {
+      parse_advance(s); // consume @
+      purple_skip(s);
+      u32 name = table_find(s->src + tag_start, tag_len);
+      Term subpattern = purple_parse_pattern(s);
+      purple_skip(s);
+      parse_consume(s, ")");
+      return purple_term_pas(term_new_num(name), subpattern);
+    }
+
+    // Otherwise it's a constructor pattern: (Tag arg1 arg2 ...)
     // Nick-encode the tag (for matching against HVM4 constructors)
     u32 tag_nick = 0;
     for (u32 i = 0; i < tag_len && i < 4; i++) {
@@ -880,29 +1226,24 @@ fn Term purple_parse_pattern(PState *s) {
     }
     Term tag_sym = term_new_num(tag_nick);
 
-    // Collect argument variable names
-    u32 arg_names[16];
+    // Collect argument patterns (recursively parsed)
+    Term arg_patterns[16];
     u32 arg_count = 0;
 
-    purple_skip(s);
     while (!parse_match(s, ")")) {
-      u32 arg_start = 0;
-      u32 arg_len = 0;
-      if (!purple_parse_symbol_token(s, &arg_start, &arg_len)) {
-        parse_error(s, "pattern variable", parse_peek(s));
-      }
       if (arg_count >= 16) {
         fprintf(stderr, "PURPLE_ERROR: too many pattern arguments\n");
         exit(1);
       }
-      arg_names[arg_count++] = table_find(s->src + arg_start, arg_len);
+      // Recursively parse sub-pattern
+      arg_patterns[arg_count++] = purple_parse_pattern(s);
       purple_skip(s);
     }
 
     // Build args list as nested CON (in reverse for proper order)
     Term args = purple_term_nil();
     for (int i = (int)arg_count - 1; i >= 0; i--) {
-      args = purple_term_con(term_new_num(arg_names[i]), args);
+      args = purple_term_con(arg_patterns[i], args);
     }
 
     return purple_term_pctr(tag_sym, args);
@@ -920,45 +1261,91 @@ fn Term purple_parse_pattern(PState *s) {
   return 0;
 }
 
+// Recursively extract and bind variable names from a pattern
+// Returns the count of bound variables
+fn u32 purple_bind_pattern_vars(Term pattern) {
+  u8 ptag = term_tag(pattern);
+  if (!(ptag >= C00 && ptag <= C16)) {
+    return 0;
+  }
+
+  u32 pnam = term_ext(pattern);
+  u32 count = 0;
+
+  if (pnam == PURPLE_NAM_PVAR) {
+    // Variable pattern: bind the name
+    Term name_term = HEAP[term_val(pattern)];
+    if (term_tag(name_term) == NUM) {
+      u32 name = term_val(name_term);
+      purple_bind_push(name);
+      count = 1;
+    }
+  } else if (pnam == PURPLE_NAM_PCTR) {
+    // Constructor pattern: recursively bind variables in sub-patterns
+    Term args = HEAP[term_val(pattern) + 1]; // second field is args list
+    while (term_tag(args) >= C00 && term_tag(args) <= C16 &&
+           term_ext(args) == PURPLE_NAM_CON) {
+      u32 loc = term_val(args);
+      Term sub_pattern = HEAP[loc];
+      count += purple_bind_pattern_vars(sub_pattern);
+      args = HEAP[loc + 1];
+    }
+  } else if (pnam == PURPLE_NAM_POR) {
+    // Or-pattern: bind variables from the first alternative
+    // (all alternatives should have the same bindings)
+    Term alts = HEAP[term_val(pattern)]; // first field is alternatives list
+    if (term_tag(alts) >= C00 && term_tag(alts) <= C16 &&
+        term_ext(alts) == PURPLE_NAM_CON) {
+      u32 loc = term_val(alts);
+      Term first_pattern = HEAP[loc];
+      count += purple_bind_pattern_vars(first_pattern);
+    }
+  } else if (pnam == PURPLE_NAM_PAS) {
+    // As-pattern: bind the name and also the subpattern's variables
+    u32 loc = term_val(pattern);
+    Term name_term = HEAP[loc];
+    if (term_tag(name_term) == NUM) {
+      u32 name = term_val(name_term);
+      purple_bind_push(name);
+      count = 1;
+    }
+    Term subpattern = HEAP[loc + 1];
+    count += purple_bind_pattern_vars(subpattern);
+  }
+  // PWld and PLit bind nothing
+
+  return count;
+}
+
 // Parse a single match case: (pattern body)
 // Binds pattern variables, parses body, unbinds
 fn Term purple_parse_match_case(PState *s) {
   parse_consume(s, "(");
 
-  // Parse the pattern
+  // Parse the pattern (now supports nested patterns)
   Term pattern = purple_parse_pattern(s);
 
-  // Extract variable names from pattern to bind them
-  u32 bound_names[16];
-  u32 bound_count = 0;
+  // Recursively extract and bind all variable names from the pattern
+  u32 bound_count = purple_bind_pattern_vars(pattern);
 
-  u8 ptag = term_tag(pattern);
-  if (ptag >= C00 && ptag <= C16) {
-    u32 pnam = term_ext(pattern);
-    if (pnam == PURPLE_NAM_PCTR) {
-      // Extract args list and bind each variable
-      Term args = HEAP[term_val(pattern) + 1]; // second field
-      while (term_tag(args) >= C00 && term_tag(args) <= C16 &&
-             term_ext(args) == PURPLE_NAM_CON) {
-        u32 loc = term_val(args);
-        Term name_term = HEAP[loc];
-        if (term_tag(name_term) == NUM) {
-          u32 name = term_val(name_term);
-          if (bound_count < 16) {
-            bound_names[bound_count++] = name;
-            purple_bind_push(name);
-          }
-        }
-        args = HEAP[loc + 1];
-      }
-    } else if (pnam == PURPLE_NAM_PVAR) {
-      // Single variable pattern
-      Term name_term = HEAP[term_val(pattern)];
-      if (term_tag(name_term) == NUM) {
-        u32 name = term_val(name_term);
-        bound_names[bound_count++] = name;
-        purple_bind_push(name);
-      }
+  // Check for optional :when guard
+  Term guard = purple_term_nil();  // Default: no guard
+  purple_skip(s);
+  if (parse_peek(s) == ':') {
+    parse_advance(s);  // consume ':'
+    // Check for "when" keyword
+    u32 start = s->pos;
+    u32 len = 0;
+    while (!parse_at_end(s) && !parse_is_space(parse_peek(s)) && parse_peek(s) != '(' && parse_peek(s) != ')') {
+      parse_advance(s);
+      len++;
+    }
+    if (purple_symbol_is(s, start, len, "when")) {
+      // Parse the guard expression (variables are already bound)
+      guard = parse_purple_form(s);
+    } else {
+      fprintf(stderr, "PURPLE_ERROR: expected 'when' after ':' in match case\n");
+      exit(1);
     }
   }
 
@@ -970,7 +1357,7 @@ fn Term purple_parse_match_case(PState *s) {
 
   parse_consume(s, ")");
 
-  return purple_term_case(pattern, body);
+  return purple_term_case(pattern, guard, body);
 }
 
 // Parse: (match expr (pattern1 body1) (pattern2 body2) ...)
@@ -1122,8 +1509,33 @@ fn Term purple_parse_prim2(PState *s, u32 nam) {
     return purple_term_or(a, b);
   } else if (nam == PURPLE_NAM_CON) {
     return purple_term_con(a, b);
+  } else if (nam == PURPLE_NAM_MAP) {
+    return purple_term_map(a, b);
+  } else if (nam == PURPLE_NAM_FLTR) {
+    return purple_term_filter(a, b);
+  } else if (nam == PURPLE_NAM_APND) {
+    return purple_term_append(a, b);
+  } else if (nam == PURPLE_NAM_COMP) {
+    return purple_term_compose(a, b);
+  } else if (nam == PURPLE_NAM_APPL) {
+    return purple_term_apply_list(a, b);
   } else {
     fprintf(stderr, "PURPLE_ERROR: unknown binary primitive\n");
+    exit(1);
+  }
+}
+
+fn Term purple_parse_prim3(PState *s, u32 nam) {
+  Term a = parse_purple_form(s);
+  Term b = parse_purple_form(s);
+  Term c = parse_purple_form(s);
+  parse_consume(s, ")");
+  if (nam == PURPLE_NAM_FOLD) {
+    return purple_term_fold(a, b, c);
+  } else if (nam == PURPLE_NAM_FOLDL) {
+    return purple_term_foldl(a, b, c);
+  } else {
+    fprintf(stderr, "PURPLE_ERROR: unknown ternary primitive\n");
     exit(1);
   }
 }
@@ -1137,6 +1549,12 @@ fn Term purple_parse_prim1(PState *s, u32 nam) {
     return purple_term_snd(a);
   } else if (nam == PURPLE_NAM_NOT) {
     return purple_term_not(a);
+  } else if (nam == PURPLE_NAM_LEN) {
+    return purple_term_length(a);
+  } else if (nam == PURPLE_NAM_REV) {
+    return purple_term_reverse(a);
+  } else if (nam == PURPLE_NAM_FLIP) {
+    return purple_term_flip(a);
   } else {
     fprintf(stderr, "PURPLE_ERROR: unknown unary primitive\n");
     exit(1);
@@ -1163,6 +1581,21 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "set-meta!")) {
       return purple_parse_setmeta(s);
+    }
+    if (purple_symbol_is(s, start, len, "default-handler")) {
+      return purple_parse_defh(s);
+    }
+    if (purple_symbol_is(s, start, len, "error")) {
+      return purple_parse_error(s);
+    }
+    if (purple_symbol_is(s, start, len, "try")) {
+      return purple_parse_try(s);
+    }
+    if (purple_symbol_is(s, start, len, "assert")) {
+      return purple_parse_assert(s);
+    }
+    if (purple_symbol_is(s, start, len, "trace")) {
+      return purple_parse_trace(s);
     }
     if (purple_symbol_is(s, start, len, "sym-eq?")) {
       return purple_parse_symeq(s);
@@ -1206,6 +1639,15 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "letrec")) {
       return purple_parse_letrec(s);
+    }
+    if (purple_symbol_is(s, start, len, "defmacro")) {
+      return purple_parse_defmacro(s);
+    }
+    if (purple_symbol_is(s, start, len, "macroexpand")) {
+      return purple_parse_macroexpand(s);
+    }
+    if (purple_symbol_is(s, start, len, "mcall")) {
+      return purple_parse_mcall(s);
     }
     if (purple_symbol_is(s, start, len, "if")) {
       return purple_parse_if(s);
@@ -1273,6 +1715,38 @@ fn Term parse_purple_list(PState *s) {
     if (purple_symbol_is(s, start, len, "nil")) {
       parse_consume(s, ")");
       return purple_term_nil();
+    }
+    // List operations
+    if (purple_symbol_is(s, start, len, "map")) {
+      return purple_parse_prim2(s, PURPLE_NAM_MAP);
+    }
+    if (purple_symbol_is(s, start, len, "filter")) {
+      return purple_parse_prim2(s, PURPLE_NAM_FLTR);
+    }
+    if (purple_symbol_is(s, start, len, "fold")) {
+      return purple_parse_prim3(s, PURPLE_NAM_FOLD);
+    }
+    if (purple_symbol_is(s, start, len, "foldl")) {
+      return purple_parse_prim3(s, PURPLE_NAM_FOLDL);
+    }
+    if (purple_symbol_is(s, start, len, "length")) {
+      return purple_parse_prim1(s, PURPLE_NAM_LEN);
+    }
+    if (purple_symbol_is(s, start, len, "append")) {
+      return purple_parse_prim2(s, PURPLE_NAM_APND);
+    }
+    if (purple_symbol_is(s, start, len, "reverse")) {
+      return purple_parse_prim1(s, PURPLE_NAM_REV);
+    }
+    // Higher-order function utilities
+    if (purple_symbol_is(s, start, len, "compose")) {
+      return purple_parse_prim2(s, PURPLE_NAM_COMP);
+    }
+    if (purple_symbol_is(s, start, len, "flip")) {
+      return purple_parse_prim1(s, PURPLE_NAM_FLIP);
+    }
+    if (purple_symbol_is(s, start, len, "apply")) {
+      return purple_parse_prim2(s, PURPLE_NAM_APPL);
     }
     Term head = purple_symbol_term(s, start, len);
     return purple_parse_app_rest(s, head);
@@ -1390,6 +1864,25 @@ fn Term parse_purple_form(PState *s) {
       k = ((k << 6) + nick_letter_to_b64(s->src[start + i])) & EXT_MASK;
     }
     return purple_term_sym(k);
+  }
+  // Quasiquote: `expr
+  if (c == '`') {
+    parse_advance(s);
+    Term expr = parse_purple_form(s);
+    return purple_term_qq(expr);
+  }
+  // Unquote: ,expr or ,@expr (splicing)
+  if (c == ',') {
+    parse_advance(s);
+    if (!parse_at_end(s) && parse_peek(s) == '@') {
+      // Unquote-splicing: ,@expr
+      parse_advance(s);
+      Term expr = parse_purple_form(s);
+      return purple_term_uqs(expr);
+    }
+    // Regular unquote: ,expr
+    Term expr = parse_purple_form(s);
+    return purple_term_uq(expr);
   }
   if (c == '(') {
     parse_advance(s);

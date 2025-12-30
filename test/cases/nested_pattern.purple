@@ -1,0 +1,1 @@
+(match (cons (cons 1 2) 3) ((CON (CON a b) c) (+ a (+ b c))) (_ 0))

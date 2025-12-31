@@ -28,6 +28,7 @@ static u32 FFI_NAM_PRNT;
 // FFI constructor names
 static u32 FFI_NAM_FFI;
 static u32 FFI_NAM_DO;
+static u32 FFI_NAM_CST;
 
 fn void ffi_names_init(void) {
   FFI_NAM_PUTS = purple_nick("puts");
@@ -37,6 +38,7 @@ fn void ffi_names_init(void) {
   FFI_NAM_PRNT = purple_nick("prnt");
   FFI_NAM_FFI  = purple_nick("FFI");
   FFI_NAM_DO   = purple_nick("Do");
+  FFI_NAM_CST  = purple_nick("Cst");
 }
 
 // Extract string from HVM4 cons list of CHR
@@ -73,8 +75,8 @@ fn int ffi_extract_int(Term v) {
   if (term_tag(v) == NUM) {
     return (int)term_val(v);
   }
-  // Check for #Cst{n} wrapper (nick("Cst") = 120020)
-  if (term_tag(v) >= C00 && term_tag(v) <= C16 && term_ext(v) == 120020) {
+  // Check for #Cst{n} wrapper
+  if (term_tag(v) >= C00 && term_tag(v) <= C16 && term_ext(v) == FFI_NAM_CST) {
     u32 loc = term_val(v);
     Term inner = HEAP[loc];
     if (term_tag(inner) == NUM) {

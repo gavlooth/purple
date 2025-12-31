@@ -2139,9 +2139,11 @@ fn int purple_already_included(const char *path) {
 }
 
 fn void purple_mark_included(const char *path) {
-  if (PURPLE_INCLUDED_LEN < 256) {
-    PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = strdup(path);
+  if (PURPLE_INCLUDED_LEN >= 256) {
+    fprintf(stderr, "PURPLE_ERROR: include depth limit exceeded (256 files)\n");
+    exit(1);
   }
+  PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = strdup(path);
 }
 
 // Process includes by text substitution

@@ -6,7 +6,7 @@
 
 3. ~~Include expansion is a raw text scan and does not skip strings or comments~~ (FIXED): `purple_expand_includes` now handles string literals (with escape sequences) and line comments (`;` and `//`) verbatim, only looking for `(include ...)` directives outside of these contexts. (src/parse/_.c:2157-2200)
 
-4. Include cycle tracking is capped at 256 paths; after that, new paths are not recorded, so large include graphs can re-include earlier files and potentially recurse indefinitely. (src/parse/_.c:2050-2065, 2132-2147)
+4. ~~Include cycle tracking is capped at 256 paths~~ (FIXED): `purple_mark_included` now errors out if the 256 path limit is exceeded, preventing silent failure that could allow infinite include recursion. (src/parse/_.c:2141-2147)
 
 5. ~~Or-pattern bindings aren't validated across alternatives~~ (FIXED): `purple_bind_pattern_vars` now validates that all alternatives bind the same variables in the same order (src/parse/_.c:1488-1510), then binds from the first alternative. Mismatched bindings cause a compile error.
 
@@ -39,3 +39,4 @@
 - Compiler pattern match buffer overflow in `src/compile/_.c`: Fixed by increasing `var_names` buffer to 64 and adding a bounds check.
 - #3 Include expansion in strings/comments: `purple_expand_includes` now skips string literals and line comments when looking for `(include ...)` directives.
 - #10 Include path memory leak: `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter.
+- #4 Include cycle tracking cap: `purple_mark_included` now errors out if the 256 path limit is exceeded.

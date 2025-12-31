@@ -2154,6 +2154,51 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
 
   u32 pos = 0;
   while (pos < len) {
+    // Skip include detection inside strings and comments
+    if (src[pos] == '"') {
+      // Copy string literal verbatim
+      if (out_len + 1 >= cap) {
+        cap *= 2;
+        out = realloc(out, cap);
+      }
+      out[out_len++] = src[pos++];
+      while (pos < len && src[pos] != '"') {
+        if (src[pos] == '\\' && pos + 1 < len) {
+          // Copy escape sequence
+          if (out_len + 2 >= cap) {
+            cap *= 2;
+            out = realloc(out, cap);
+          }
+          out[out_len++] = src[pos++];
+          out[out_len++] = src[pos++];
+        } else {
+          if (out_len + 1 >= cap) {
+            cap *= 2;
+            out = realloc(out, cap);
+          }
+          out[out_len++] = src[pos++];
+        }
+      }
+      if (pos < len) {
+        if (out_len + 1 >= cap) {
+          cap *= 2;
+          out = realloc(out, cap);
+        }
+        out[out_len++] = src[pos++]; // closing quote
+      }
+      continue;
+    }
+    // Skip line comments (; or //)
+    if (src[pos] == ';' || (src[pos] == '/' && pos + 1 < len && src[pos + 1] == '/')) {
+      while (pos < len && src[pos] != '\n') {
+        if (out_len + 1 >= cap) {
+          cap *= 2;
+          out = realloc(out, cap);
+        }
+        out[out_len++] = src[pos++];
+      }
+      continue;
+    }
     // Look for (include "
     if (pos + 10 < len &&
         src[pos] == '(' &&

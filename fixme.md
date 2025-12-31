@@ -4,7 +4,7 @@
 
 2. ~~FFI `do` continuation loses the evaluation environment~~ (FIXED): The runtime now wraps the continuation in `#WMnv{menv, rest}` when FFI is detected (lib/runtime.hvm4:913), and the C driver handles `#WMnv` to preserve the evaluation context (src/run/_.c:186-191, 227-231).
 
-3. Include expansion is a raw text scan and does not skip strings or comments. A literal like `"(include \"x.purple\")"` or a commented-out include will still be expanded, corrupting source before parsing. (src/parse/_.c:2070-2169)
+3. ~~Include expansion is a raw text scan and does not skip strings or comments~~ (FIXED): `purple_expand_includes` now handles string literals (with escape sequences) and line comments (`;` and `//`) verbatim, only looking for `(include ...)` directives outside of these contexts. (src/parse/_.c:2157-2200)
 
 4. Include cycle tracking is capped at 256 paths; after that, new paths are not recorded, so large include graphs can re-include earlier files and potentially recurse indefinitely. (src/parse/_.c:2050-2065, 2132-2147)
 
@@ -38,3 +38,4 @@
 - #8 Native match Case body: Now correctly reads body from arg2 of 3-arg `#Case{pattern, guard, body}`.
 - Include path buffer overflow risk in `src/parse/_.c`: Fixed by adding a check to ensure `path_len` fits in the buffer before `memcpy`.
 - Compiler pattern match buffer overflow in `src/compile/_.c`: Fixed by increasing `var_names` buffer to 64 and adding a bounds check.
+- #3 Include expansion in strings/comments: `purple_expand_includes` now skips string literals and line comments when looking for `(include ...)` directives.

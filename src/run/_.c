@@ -13,6 +13,7 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <stdatomic.h>
+#include <unistd.h>
 
 // Include HVM4 runtime
 #include "../../hvm4/clang/hvm4.c"
@@ -963,23 +964,49 @@ fn void emit_runtime(FILE *out, const char *argv0) {
 
 int main(int argc, char **argv) {
   int show_stats = 0;
+  int do_collapse = 0;
+  int collapse_limit = -1;  // -1 = no limit
+  int num_threads = 0;      // 0 = auto (all cores)
   char *in_path = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-s") == 0) {
       show_stats = 1;
+    } else if (strncmp(argv[i], "-C", 2) == 0) {
+      // Collapse mode: -C or -C<limit>
+      do_collapse = 1;
+      if (argv[i][2] != '\0') {
+        collapse_limit = atoi(&argv[i][2]);
+      }
+    } else if (strncmp(argv[i], "-T", 2) == 0) {
+      // Thread count: -T<n>
+      if (argv[i][2] != '\0') {
+        num_threads = atoi(&argv[i][2]);
+      } else {
+        num_threads = 0;  // auto
+      }
     } else if (argv[i][0] != '-') {
       in_path = argv[i];
     }
   }
 
   if (!in_path) {
-    fprintf(stderr, "Usage: %s <file.purple> [-s]\n", argv[0]);
+    fprintf(stderr, "Usage: %s <file.purple> [-s] [-C[limit]] [-T<threads>]\n", argv[0]);
+    fprintf(stderr, "  -s         Show statistics\n");
+    fprintf(stderr, "  -C         Collapse mode (enumerate all superposition branches)\n");
+    fprintf(stderr, "  -C<n>      Collapse with limit of n branches\n");
+    fprintf(stderr, "  -T<n>      Use n threads (0 = auto, uses all cores)\n");
     return 1;
   }
 
-  // Configure threads (default: 1)
-  thread_set_count(1);
+  // Configure threads
+  u32 threads = (num_threads > 0) ? (u32)num_threads : 1;
+  if (do_collapse && num_threads == 0) {
+    // Auto-detect cores for collapse mode
+    threads = sysconf(_SC_NPROCESSORS_ONLN);
+    if (threads == 0) threads = 1;
+  }
+  thread_set_count(threads);
   wnf_set_tid(0);
 
   // Allocate memory
@@ -1072,23 +1099,36 @@ int main(int argc, char **argv) {
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
 
-  Term result = wnf(term_new_ref(main_id));
+  Term main_ref = term_new_ref(main_id);
 
-  // Process FFI calls
-  result = ffi_process(result);
+  if (do_collapse) {
+    // Collapse mode: enumerate all superposition branches in parallel
+    // Note: FFI calls are not supported in collapse mode
+    if (threads > 1) {
+      fprintf(stderr, "Running with %u threads in collapse mode\n", threads);
+    }
+    eval_collapse(main_ref, collapse_limit, show_stats, 0);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+  } else {
+    // Normal mode: single result with FFI support
+    Term result = wnf(main_ref);
 
-  clock_gettime(CLOCK_MONOTONIC, &end);
+    // Process FFI calls
+    result = ffi_process(result);
 
-  // Print final result (if not unit)
-  if (term_tag(result) != NUM || term_val(result) != 0) {
-    print_term(result);
-    printf("\n");
-  }
+    clock_gettime(CLOCK_MONOTONIC, &end);
 
-  if (show_stats) {
-    double dt = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-    printf("- Itrs: %llu interactions\n", (unsigned long long)ITRS);
-    printf("- Time: %.3f seconds\n", dt);
+    // Print final result (if not unit)
+    if (term_tag(result) != NUM || term_val(result) != 0) {
+      print_term(result);
+      printf("\n");
+    }
+
+    if (show_stats) {
+      double dt = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+      printf("- Itrs: %llu interactions\n", (unsigned long long)ITRS);
+      printf("- Time: %.3f seconds\n", dt);
+    }
   }
 
   // Stop FFI worker threads

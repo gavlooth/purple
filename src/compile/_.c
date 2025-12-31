@@ -1170,18 +1170,29 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
     }
 
     // Parallel primitives (HVM4 native)
-    // Par: #Par{a, b} -> evaluate both in parallel, return pair
-    if (nam == PURPLE_NAM_PAR && ari == 2) {
-      fputs("#Par{", e->out);
+    // Amb: #Amb{a, b} -> nondeterministic choice (HVM4 superposition, label 0)
+    if (nam == PURPLE_NAM_AMB && ari == 2) {
+      fputs("#Amb{", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 0));
       fputs(", ", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 1));
       fputc('}', e->out);
       return;
     }
-    // Amb: #Amb{a, b} -> nondeterministic choice (HVM4 superposition)
-    if (nam == PURPLE_NAM_AMB && ari == 2) {
-      fputs("#Amb{", e->out);
+    // Fork: #Fork{label, a, b} -> labeled superposition (different labels = cross product)
+    if (nam == PURPLE_NAM_FORK && ari == 3) {
+      fputs("#Fork{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));
+      fputc('}', e->out);
+      return;
+    }
+    // ESeq: #ESeq{a, b} -> sequential evaluation (a then b, return b)
+    if (nam == PURPLE_NAM_ESEQ && ari == 2) {
+      fputs("#ESeq{", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 0));
       fputs(", ", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 1));

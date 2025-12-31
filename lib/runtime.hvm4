@@ -1457,19 +1457,25 @@
       // Control outside reset is an error
       #Ctrl: λ&k_idx. λ&body.
         @pink_err(#ctrl)
-      // Parallel evaluation - HVM4 evaluates both lazily/in parallel
-      // Returns a pair (cons cell) of both results
-      #Par: λ&a. λ&b.
-        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
-        !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
-        #CON{va, vb}
-      // Nondeterministic choice - HVM4 superposition
+      // Nondeterministic choice - HVM4 superposition (label 0, pairwise annihilation)
       // When collapsed, enumerates both possibilities
       // Uses dynamic superposition syntax &(label){a, b}
       #Amb: λ&a. λ&b.
         !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         &(0){va, vb}
+      // Labeled fork - different labels give cross product behavior
+      // (fork 1 a b) and (fork 2 c d) will give all 4 combinations: a+c, a+d, b+c, b+d
+      #Fork: λ&label. λ&a. λ&b.
+        !!&vlabel = @purple_eval(#MEnv{env, handlers, parent, level})(label);
+        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
+        λ{#Cst: λ&n. &(n){va, vb}; _ : @pink_err(#fork)}(vlabel)
+      // eval-in-seq: evaluate a first, then b, return b
+      // The application (λ&u. ...)(va) forces va to be computed before evaluating b
+      #ESeq: λ&a. λ&b.
+        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
+        (λ&u. @purple_eval(#MEnv{env, handlers, parent, level})(b))(va)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -1803,19 +1809,23 @@
         !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
         !!&vargs = @purple_evalc(#MEnv{env, handlers, parent, level})(args);
         @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
-      // Parallel evaluation - HVM4 evaluates both lazily/in parallel
-      // Returns a pair (cons cell) of both results
-      #Par: λ&a. λ&b.
-        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
-        !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
-        #CON{va, vb}
-      // Nondeterministic choice - HVM4 superposition
+      // Nondeterministic choice - HVM4 superposition (label 0, pairwise annihilation)
       // When collapsed, enumerates both possibilities
       // Uses dynamic superposition syntax &(label){a, b}
       #Amb: λ&a. λ&b.
         !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
         !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
         &(0){va, vb}
+      // Labeled fork - different labels give cross product behavior
+      #Fork: λ&label. λ&a. λ&b.
+        !!&vlabel = @purple_evalc(#MEnv{env, handlers, parent, level})(label);
+        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
+        λ{#Cst: λ&n. &(n){va, vb}; _ : @pink_err(#fork)}(vlabel)
+      // eval-in-seq: evaluate a first, then b, return b
+      #ESeq: λ&a. λ&b.
+        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
+        (λ&u. @purple_evalc(#MEnv{env, handlers, parent, level})(b))(va)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)

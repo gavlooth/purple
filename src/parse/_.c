@@ -111,8 +111,9 @@ static u32 PURPLE_NAM_CTRL;   // Ctrl (control/shift)
 static u32 PURPLE_NAM_FIX;    // Fix{value, scale}
 
 // Parallel primitives (HVM4 native)
-static u32 PURPLE_NAM_PAR;    // Par{a, b} - parallel evaluation
-static u32 PURPLE_NAM_AMB;    // Amb{a, b} - nondeterminism (SUP)
+static u32 PURPLE_NAM_AMB;    // Amb{a, b} - nondeterminism (SUP, label 0)
+static u32 PURPLE_NAM_FORK;   // Fork{label, a, b} - labeled superposition
+static u32 PURPLE_NAM_ESEQ;   // ESeq{a, b} - eval-in-seq: eval a, then b, return b
 
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
@@ -213,8 +214,9 @@ fn void purple_names_init(void) {
   PURPLE_NAM_CTRL   = purple_nick("Ctrl");
   // Fixed-point numbers
   PURPLE_NAM_FIX    = purple_nick("Fix");
-  PURPLE_NAM_PAR    = purple_nick("Par");
   PURPLE_NAM_AMB    = purple_nick("Amb");
+  PURPLE_NAM_FORK   = purple_nick("Fork");
+  PURPLE_NAM_ESEQ   = purple_nick("ESeq");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -750,14 +752,19 @@ fn Term purple_term_control(Term k_var, Term body) {
 }
 
 // Parallel primitives
-// Par: (par a b) -> evaluate both in parallel, return pair
-fn Term purple_term_par(Term a, Term b) {
-  return purple_ctr2(PURPLE_NAM_PAR, a, b);
-}
-
-// Amb: (amb a b) -> nondeterministic choice (HVM4 superposition)
+// Amb: (amb a b) -> nondeterministic choice (HVM4 superposition, label 0)
 fn Term purple_term_amb(Term a, Term b) {
   return purple_ctr2(PURPLE_NAM_AMB, a, b);
+}
+
+// Fork: (fork label a b) -> labeled superposition (different labels = cross product)
+fn Term purple_term_fork(Term label, Term a, Term b) {
+  return purple_ctr3(PURPLE_NAM_FORK, label, a, b);
+}
+
+// eval-in-seq: (eval-in-seq a b) -> evaluate a first, then b, return b
+fn Term purple_term_eseq(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_ESEQ, a, b);
 }
 
 fn Term purple_term_ctag(Term e) {
@@ -1408,20 +1415,29 @@ fn Term purple_parse_control(PState *s) {
   return purple_term_control(purple_term_var(0), body);
 }
 
-// (par a b) -> evaluate both in parallel, return pair
-fn Term purple_parse_par(PState *s) {
-  Term a = parse_purple_form(s);
-  Term b = parse_purple_form(s);
-  parse_consume(s, ")");
-  return purple_term_par(a, b);
-}
-
-// (amb a b) -> nondeterministic choice (HVM4 superposition)
+// (amb a b) -> nondeterministic choice (HVM4 superposition, label 0)
 fn Term purple_parse_amb(PState *s) {
   Term a = parse_purple_form(s);
   Term b = parse_purple_form(s);
   parse_consume(s, ")");
   return purple_term_amb(a, b);
+}
+
+// (fork label a b) -> labeled superposition (different labels = cross product)
+fn Term purple_parse_fork(PState *s) {
+  Term label = parse_purple_form(s);
+  Term a = parse_purple_form(s);
+  Term b = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_fork(label, a, b);
+}
+
+// (eval-in-seq a b) -> evaluate a first, then b, return b
+fn Term purple_parse_eseq(PState *s) {
+  Term a = parse_purple_form(s);
+  Term b = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_eseq(a, b);
 }
 
 fn Term purple_parse_ctag(PState *s) {
@@ -2044,11 +2060,14 @@ fn Term parse_purple_list(PState *s) {
       return purple_parse_control(s);
     }
     // Parallel primitives
-    if (purple_symbol_is(s, start, len, "par")) {
-      return purple_parse_par(s);
-    }
     if (purple_symbol_is(s, start, len, "amb")) {
       return purple_parse_amb(s);
+    }
+    if (purple_symbol_is(s, start, len, "fork")) {
+      return purple_parse_fork(s);
+    }
+    if (purple_symbol_is(s, start, len, "eval-in-seq")) {
+      return purple_parse_eseq(s);
     }
     if (purple_symbol_is(s, start, len, "ctr-tag")) {
       return purple_parse_ctag(s);

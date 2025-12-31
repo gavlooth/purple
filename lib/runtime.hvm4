@@ -8,6 +8,53 @@
 // Error constructor with symbol payload
 @pink_err = λ&msg. #Err{msg}
 
+// =============================================================================
+// Fixed-Point Arithmetic Helpers (uses parallel integer ops)
+// =============================================================================
+
+// Add two fixed-point numbers (assumes same scale for now)
+// #Fix{hi1, lo1, s} + #Fix{hi2, lo2, s} = #Fix{hi1+hi2+carry, lo1+lo2, s}
+// Simplified: for values < 2^32, we only use lo
+@fix_add = λa. λb.
+  λ{#Fix: λ&h1. λ&l1. λ&s1.
+    λ{#Fix: λ&h2. λ&l2. λ&s2.
+      #Fix{(h1 + h2), (l1 + l2), s1}
+    ; _ : @pink_err(#fxad)}(b)
+  ; _ : @pink_err(#fxad)}(a)
+
+// Subtract two fixed-point numbers (assumes same scale)
+@fix_sub = λa. λb.
+  λ{#Fix: λ&h1. λ&l1. λ&s1.
+    λ{#Fix: λ&h2. λ&l2. λ&s2.
+      #Fix{(h1 - h2), (l1 - l2), s1}
+    ; _ : @pink_err(#fxsb)}(b)
+  ; _ : @pink_err(#fxsb)}(a)
+
+// Multiply two fixed-point numbers
+// #Fix{0, v1, s1} * #Fix{0, v2, s2} = #Fix{0, v1*v2, s1+s2}
+@fix_mul = λa. λb.
+  λ{#Fix: λ&h1. λ&l1. λ&s1.
+    λ{#Fix: λ&h2. λ&l2. λ&s2.
+      #Fix{0, (l1 * l2), (s1 + s2)}
+    ; _ : @pink_err(#fxmu)}(b)
+  ; _ : @pink_err(#fxmu)}(a)
+
+// Divide two fixed-point numbers
+// #Fix{0, v1, s1} / #Fix{0, v2, s2} = #Fix{0, v1/v2, s1-s2}
+@fix_div = λa. λb.
+  λ{#Fix: λ&h1. λ&l1. λ&s1.
+    λ{#Fix: λ&h2. λ&l2. λ&s2.
+      #Fix{0, (l1 / l2), (s1 - s2)}
+    ; _ : @pink_err(#fxdv)}(b)
+  ; _ : @pink_err(#fxdv)}(a)
+
+// Compare fixed-point with integer (for conditionals)
+// Returns 1 if non-zero, 0 if zero
+@fix_to_bool = λa.
+  λ{#Fix: λ&h. λ&l. λ&s.
+    λ{0: λ{0: 0; _ : 1}(l); _ : 1}(h)
+  ; _ : @pink_err(#fxbl)}(a)
+
 @pink_env_head = λe. !!&env = e; λ{#CON: λ&a. λ&b. a; #NIL: @pink_err(#env)}(env)
 @pink_env_tail = λe. !!&env = e; λ{#CON: λ&a. λ&b. b; #NIL: @pink_err(#env)}(env)
 
@@ -19,6 +66,8 @@
 @pink_reify = λv.
   λ{
     #Cst: λ&n. #Lit{n}
+    #Fix: λ&hi. λ&lo. λ&scale. #Fix{hi, lo, scale}
+    #Ptr: λ&hi. λ&lo. #Ptr{hi, lo}
     #Sym: λ&s. #Sym{s}
     #CHR: λ&c. #CHR{c}
     #CON: λ&a. λ&b. #CON{@pink_reify(a), @pink_reify(b)}
@@ -53,6 +102,8 @@
   %env = e;
   λ{
     #Lit: λ&n. #Cst{n}
+    #Fix: λ&hi. λ&lo. λ&scale. #Fix{hi, lo, scale}
+    #Ptr: λ&hi. λ&lo. #Ptr{hi, lo}
     #Sym: λ&s. #Sym{s}
     #Var: λ&n. @pink_env_get(env)(n)
     #Lam: λ&body. #Clo{env, body}
@@ -154,6 +205,8 @@
   %env = e;
   λ{
     #Lit: λ&n. @pink_lift(#Cst{n})
+    #Fix: λ&hi. λ&lo. λ&scale. @pink_lift(#Fix{hi, lo, scale})
+    #Ptr: λ&hi. λ&lo. @pink_lift(#Ptr{hi, lo})
     #Sym: λ&s. @pink_lift(#Sym{s})
     #Var: λ&n. @pink_lift(@pink_env_get(env)(n))
     #Lam: λ&body. @pink_lift(#Clo{env, body})
@@ -966,6 +1019,10 @@
     λ{
       #Lit: λ&n. (kont(#Cst{n}))
 
+      #Fix: λ&hi. λ&lo. λ&scale. (kont(#Fix{hi, lo, scale}))
+
+      #Ptr: λ&hi. λ&lo. (kont(#Ptr{hi, lo}))
+
       #Var: λ&n. (kont(@pink_env_get(env)(n)))
 
       #Lam: λ&body. (kont(#CloCps{env, body}))
@@ -1059,6 +1116,8 @@
       #Lit: λ&n.
         !!&h = @purple_htab_get(handlers)(0);
         @purple_call1(#MEnv{env, handlers, parent, level})(@purple_eval)(h)(#Cst{n})
+      #Fix: λ&hi. λ&lo. λ&scale. #Fix{hi, lo, scale}
+      #Ptr: λ&hi. λ&lo. #Ptr{hi, lo}
       #Sym: λ&s. #Sym{s}
       #Var: λ&n.
         !!&h = @purple_htab_get(handlers)(1);
@@ -1110,6 +1169,7 @@
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
           #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na + nb)}; #Cod: λ&cb. #Cod{#Add{#Lit{na}, cb}}; _ : @pink_err(#add)}(vb)
+          #Fix: λ&h1. λ&l1. λ&s1. @fix_add(#Fix{h1, l1, s1})(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Add{ca, cb}}; _ : @pink_err(#add)}(vb)
           _ : @pink_err(#add)
         }(va)
@@ -1118,6 +1178,7 @@
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
           #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na - nb)}; #Cod: λ&cb. #Cod{#Sub{#Lit{na}, cb}}; _ : @pink_err(#sub)}(vb)
+          #Fix: λ&h1. λ&l1. λ&s1. @fix_sub(#Fix{h1, l1, s1})(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Sub{ca, cb}}; _ : @pink_err(#sub)}(vb)
           _ : @pink_err(#sub)
         }(va)
@@ -1126,6 +1187,7 @@
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
           #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na * nb)}; #Cod: λ&cb. #Cod{#Mul{#Lit{na}, cb}}; _ : @pink_err(#mul)}(vb)
+          #Fix: λ&h1. λ&l1. λ&s1. @fix_mul(#Fix{h1, l1, s1})(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Mul{ca, cb}}; _ : @pink_err(#mul)}(vb)
           _ : @pink_err(#mul)
         }(va)
@@ -1402,6 +1464,8 @@
       #Lit: λ&n.
         !!&h = @purple_htab_get(handlers)(0);
         @pink_lift(@purple_call1(#MEnv{env, handlers, parent, level})(@purple_evalc)(h)(#Cst{n}))
+      #Fix: λ&hi. λ&lo. λ&scale. @pink_lift(#Fix{hi, lo, scale})
+      #Ptr: λ&hi. λ&lo. @pink_lift(#Ptr{hi, lo})
       #Sym: λ&s. @pink_lift(#Sym{s})
       #Var: λ&n.
         !!&h = @purple_htab_get(handlers)(1);
@@ -1949,6 +2013,8 @@
 @purple_unwrap = λ&v.
   λ{
     #Cst: λ&n. n
+    #Fix: λ&hi. λ&lo. λ&scale. #Fix{hi, lo, scale}
+    #Ptr: λ&hi. λ&lo. #Ptr{hi, lo}
     #Sym: λ&s. #Sym{s}
     #CHR: λ&c. #CHR{c}
     #CON: λ&a. λ&b. #CON{@purple_unwrap(a), @purple_unwrap(b)}

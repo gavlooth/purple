@@ -107,6 +107,9 @@ static u32 PURPLE_NAM_GSYM;   // GSym (gensym n)
 static u32 PURPLE_NAM_PRMT;   // Prmt (prompt/reset)
 static u32 PURPLE_NAM_CTRL;   // Ctrl (control/shift)
 
+// Fixed-point numbers
+static u32 PURPLE_NAM_FIX;    // Fix{value, scale}
+
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
   for (u32 i = 0; name[i] != '\0'; i++) {
@@ -204,6 +207,8 @@ fn void purple_names_init(void) {
   // Delimited continuations
   PURPLE_NAM_PRMT   = purple_nick("Prmt");
   PURPLE_NAM_CTRL   = purple_nick("Ctrl");
+  // Fixed-point numbers
+  PURPLE_NAM_FIX    = purple_nick("Fix");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -315,6 +320,101 @@ fn u32 purple_parse_number(PState *s) {
   return n;
 }
 
+// Parse a fixed-point number: 3.14, .5, 1e10, 1.5e-3, -2.5
+// Returns 1 if parsed as fixed-point, 0 if integer
+// Sets *value and *scale for fixed-point, or *int_val for integer
+fn int purple_parse_numeric(PState *s, int64_t *value, u32 *scale, u32 *int_val) {
+  purple_skip(s);
+
+  int negative = 0;
+  char c = parse_peek(s);
+
+  // Check for negative sign
+  if (c == '-') {
+    negative = 1;
+    parse_advance(s);
+    c = parse_peek(s);
+  }
+
+  // Parse integer part
+  int64_t int_part = 0;
+  while (!parse_at_end(s) && isdigit(parse_peek(s))) {
+    c = parse_peek(s);
+    int_part = int_part * 10 + (int64_t)(c - '0');
+    parse_advance(s);
+  }
+
+  // Check for decimal point
+  c = parse_peek(s);
+  if (c != '.' && c != 'e' && c != 'E') {
+    // Plain integer
+    if (negative) int_part = -int_part;
+    *int_val = (u32)int_part;
+    purple_skip(s);
+    return 0;  // Integer, not fixed-point
+  }
+
+  // Parse fractional part
+  int64_t frac_part = 0;
+  u32 frac_digits = 0;
+  if (c == '.') {
+    parse_advance(s);
+    while (!parse_at_end(s) && isdigit(parse_peek(s))) {
+      c = parse_peek(s);
+      frac_part = frac_part * 10 + (int64_t)(c - '0');
+      frac_digits++;
+      parse_advance(s);
+    }
+  }
+
+  // Parse exponent
+  int32_t exp = 0;
+  c = parse_peek(s);
+  if (c == 'e' || c == 'E') {
+    parse_advance(s);
+    int exp_neg = 0;
+    c = parse_peek(s);
+    if (c == '-') {
+      exp_neg = 1;
+      parse_advance(s);
+    } else if (c == '+') {
+      parse_advance(s);
+    }
+    while (!parse_at_end(s) && isdigit(parse_peek(s))) {
+      c = parse_peek(s);
+      exp = exp * 10 + (int32_t)(c - '0');
+      parse_advance(s);
+    }
+    if (exp_neg) exp = -exp;
+  }
+
+  // Calculate final value and scale
+  // value = (int_part * 10^frac_digits + frac_part) * 10^exp
+  // scale = frac_digits - exp
+  int64_t mantissa = int_part;
+  for (u32 i = 0; i < frac_digits; i++) {
+    mantissa *= 10;
+  }
+  mantissa += frac_part;
+
+  // Adjust for exponent
+  int32_t final_scale = (int32_t)frac_digits - exp;
+  if (final_scale < 0) {
+    // Scale up the mantissa
+    for (int32_t i = 0; i < -final_scale; i++) {
+      mantissa *= 10;
+    }
+    final_scale = 0;
+  }
+
+  if (negative) mantissa = -mantissa;
+
+  *value = mantissa;
+  *scale = (u32)final_scale;
+  purple_skip(s);
+  return 1;  // Fixed-point
+}
+
 fn int purple_symbol_is(PState *s, u32 start, u32 len, const char *lit) {
   u32 lit_len = (u32)strlen(lit);
   if (len != lit_len) {
@@ -358,6 +458,19 @@ fn Term purple_ctr3(u32 nam, Term a, Term b, Term c) {
 // Pink AST constructors
 fn Term purple_term_lit(u32 n) {
   return purple_ctr1(PURPLE_NAM_LIT, term_new_num(n));
+}
+
+// Fixed-point number: #Fix{hi, lo, scale}
+// value is the scaled integer (split into hi/lo), scale is the power of 10
+fn Term purple_term_fix(int64_t value, u32 scale) {
+  // Store value as two u32s for large numbers (hi, lo)
+  u32 hi = (u32)(((u64)value) >> 32);
+  u32 lo = (u32)(value & 0xFFFFFFFF);
+  Term args[3];
+  args[0] = term_new_num(hi);
+  args[1] = term_new_num(lo);
+  args[2] = term_new_num(scale);
+  return term_new_ctr(PURPLE_NAM_FIX, 3, args);
 }
 
 fn Term purple_term_sym(u32 sym_id) {
@@ -2170,9 +2283,16 @@ fn Term parse_purple_form(PState *s) {
     parse_advance(s);
     return parse_purple_list(s);
   }
-  if (isdigit(c)) {
-    u32 n = purple_parse_number(s);
-    return purple_term_lit(n);
+  if (isdigit(c) || (c == '.' && isdigit(s->src[s->pos + 1]))) {
+    int64_t fix_value;
+    u32 fix_scale, int_val;
+    if (purple_parse_numeric(s, &fix_value, &fix_scale, &int_val)) {
+      // Fixed-point number
+      return purple_term_fix(fix_value, fix_scale);
+    } else {
+      // Plain integer
+      return purple_term_lit(int_val);
+    }
   }
   u32 start = 0;
   u32 len   = 0;

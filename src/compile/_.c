@@ -558,6 +558,18 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       return;
     }
 
+    // Fixed-point: #Fix{hi, lo, scale}
+    if (nam == PURPLE_NAM_FIX && ari == 3) {
+      fputs("#Fix{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));  // hi
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));  // lo
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 2));  // scale
+      fputc('}', e->out);
+      return;
+    }
+
     // Sym
     if (nam == PURPLE_NAM_SYM && ari == 1) {
       Term s = purple_ctr_arg(t, 0);

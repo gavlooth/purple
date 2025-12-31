@@ -1,0 +1,3 @@
+; Test fixed-point addition
+; 1.5 + 2.5 = 4.0 = #Fix{0, 40, 1}
+(+ 1.5 2.5)

@@ -433,10 +433,10 @@ fn void purple_emit_native_match(PurpleEmit *e, Term scrutinee, Term cases) {
         if (!first) fputs("; ", e->out);
         first = 0;
 
-        // Each case is #Case{pattern, body}
+        // Each case is #Case{pattern, guard, body}
         if (term_tag(case_term) >= C00 && term_ext(case_term) == PURPLEC_NAM_CASE) {
           Term pattern = purple_ctr_arg(case_term, 0);
-          Term body = purple_ctr_arg(case_term, 1);
+          Term body = purple_ctr_arg(case_term, 2);
 
           u8 ptag = term_tag(pattern);
           if (ptag >= C00 && ptag <= C16) {

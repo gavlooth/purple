@@ -21,7 +21,12 @@ fn const char *purple_env_push(PurpleEmit *e) {
     fprintf(stderr, "PURPLE_ERROR: too many bindings\n");
     exit(1);
   }
-  e->env_names[e->env_len++] = strdup(buf);
+  char *dup = strdup(buf);
+  if (!dup) {
+    fprintf(stderr, "PURPLE_ERROR: out of memory in env_push\n");
+    exit(1);
+  }
+  e->env_names[e->env_len++] = dup;
   return e->env_names[e->env_len - 1];
 }
 

@@ -2143,7 +2143,12 @@ fn void purple_mark_included(const char *path) {
     fprintf(stderr, "PURPLE_ERROR: include depth limit exceeded (256 files)\n");
     exit(1);
   }
-  PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = strdup(path);
+  char *dup = strdup(path);
+  if (!dup) {
+    fprintf(stderr, "PURPLE_ERROR: out of memory in mark_included\n");
+    exit(1);
+  }
+  PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = dup;
 }
 
 // Helper to grow buffer with error checking

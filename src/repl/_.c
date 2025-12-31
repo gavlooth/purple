@@ -393,7 +393,7 @@ fn char* read_expr(void) {
       char c = line[i];
 
       if (c == '\n' && !in_string) {
-        buf[pos++] = ' ';
+        if (pos < (int)sizeof(buf) - 1) buf[pos++] = ' ';
         continue;
       }
 
@@ -414,8 +414,10 @@ fn char* read_expr(void) {
         if (c == ')') parens--;
       }
 
-      buf[pos++] = c;
-      got_input = 1;
+      if (pos < (int)sizeof(buf) - 1) {
+        buf[pos++] = c;
+        got_input = 1;
+      }
     }
 
     // Check if expression is complete

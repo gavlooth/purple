@@ -356,6 +356,10 @@ int main(int argc, char **argv) {
   long size = ftell(tmp);
   fseek(tmp, 0, SEEK_SET);
   char *hvm4_src = malloc(size + 1);
+  if (!hvm4_src) {
+    fclose(tmp);
+    sys_error("out of memory allocating HVM4 source buffer");
+  }
   fread(hvm4_src, 1, size, tmp);
   hvm4_src[size] = '\0';
   fclose(tmp);

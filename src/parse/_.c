@@ -103,6 +103,10 @@ static u32 PURPLE_NAM_TRCE;   // Trce (trace expr)
 static u32 PURPLE_NAM_RENV;   // REnv (reify-env)
 static u32 PURPLE_NAM_GSYM;   // GSym (gensym n)
 
+// Delimited continuations
+static u32 PURPLE_NAM_PRMT;   // Prmt (prompt/reset)
+static u32 PURPLE_NAM_CTRL;   // Ctrl (control/shift)
+
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
   for (u32 i = 0; name[i] != '\0'; i++) {
@@ -197,6 +201,9 @@ fn void purple_names_init(void) {
   PURPLE_NAM_TRCE   = purple_nick("Trce");
   PURPLE_NAM_RENV   = purple_nick("REnv");
   PURPLE_NAM_GSYM   = purple_nick("GSym");
+  // Delimited continuations
+  PURPLE_NAM_PRMT   = purple_nick("Prmt");
+  PURPLE_NAM_CTRL   = purple_nick("Ctrl");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -610,6 +617,17 @@ fn Term purple_term_mlvl(void) {
 
 fn Term purple_term_shft(Term n, Term e) {
   return purple_ctr2(PURPLE_NAM_SHFT, n, e);
+}
+
+// Delimited continuations
+// Prompt: (reset expr) -> evaluates expr with a continuation boundary
+fn Term purple_term_prompt(Term e) {
+  return purple_ctr1(PURPLE_NAM_PRMT, e);
+}
+
+// Control: (control k expr) -> captures continuation to k and evaluates expr
+fn Term purple_term_control(Term k_var, Term body) {
+  return purple_ctr2(PURPLE_NAM_CTRL, k_var, body);
 }
 
 fn Term purple_term_ctag(Term e) {
@@ -1227,6 +1245,39 @@ fn Term purple_parse_shift(PState *s) {
   return purple_term_shft(n, e);
 }
 
+// Delimited continuations
+// (reset expr) -> evaluate with continuation boundary
+fn Term purple_parse_reset(PState *s) {
+  Term e = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_prompt(e);
+}
+
+// (control k expr) -> capture continuation as k, evaluate expr
+fn Term purple_parse_control(PState *s) {
+  // Parse variable name for continuation
+  u32 start = 0;
+  u32 len = 0;
+  if (!purple_parse_symbol_token(s, &start, &len)) {
+    parse_error(s, "continuation variable", parse_peek(s));
+  }
+  u32 k_sym = table_find(s->src + start, len);
+
+  // Push k variable for body scope
+  purple_bind_push(k_sym);
+
+  // Parse body
+  Term body = parse_purple_form(s);
+
+  // Pop k variable
+  purple_bind_pop(1);
+
+  parse_consume(s, ")");
+
+  // Store k's de Bruijn index (0 since it's the innermost binding)
+  return purple_term_control(purple_term_var(0), body);
+}
+
 fn Term purple_parse_ctag(PState *s) {
   Term e = parse_purple_form(s);
   parse_consume(s, ")");
@@ -1838,6 +1889,13 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "shift")) {
       return purple_parse_shift(s);
+    }
+    // Delimited continuations
+    if (purple_symbol_is(s, start, len, "reset")) {
+      return purple_parse_reset(s);
+    }
+    if (purple_symbol_is(s, start, len, "control")) {
+      return purple_parse_control(s);
     }
     if (purple_symbol_is(s, start, len, "ctr-tag")) {
       return purple_parse_ctag(s);

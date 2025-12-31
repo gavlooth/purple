@@ -867,6 +867,21 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
       fputc('}', e->out);
       return;
     }
+    // Delimited continuations
+    if (nam == PURPLE_NAM_PRMT && ari == 1) {
+      fputs("#Prmt{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputc('}', e->out);
+      return;
+    }
+    if (nam == PURPLE_NAM_CTRL && ari == 2) {
+      fputs("#Ctrl{", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 0));
+      fputs(", ", e->out);
+      purple_compile_emit_term(e, purple_ctr_arg(t, 1));
+      fputc('}', e->out);
+      return;
+    }
     if (nam == PURPLE_NAM_CTAG && ari == 1) {
       fputs("#CTag{", e->out);
       purple_compile_emit_term(e, purple_ctr_arg(t, 0));

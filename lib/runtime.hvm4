@@ -378,6 +378,9 @@
     #CloR: λ&cenv. λ&body.
       @purple_eval(@purple_menv_new(0)(#NIL)(#CON{vx, #CON{vf, cenv}}))(body)
     #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
+    #KontCps: λ&k. (k(vx))
+    #CloCps: λ&cenv. λ&body.
+      @purple_eval(@purple_menv_new(0)(#NIL)(#CON{vx, cenv}))(body)
     _ : @pink_err(#app)
   }(vf)
 
@@ -610,6 +613,12 @@
       !!&new_menv = @purple_menv_with_env(menv)(#CON{vx, #CON{vf, cenv}});
       self(new_menv)(body)
     #Cod: λ&fcode. λ{#Cod: λ&acode. #Cod{#App{fcode, acode}}; _ : @pink_err(#app)}(vx)
+    // Captured CPS continuation - call the native lambda directly
+    #KontCps: λ&k. (k(vx))
+    // CPS closure - evaluate body with arg bound
+    #CloCps: λ&cenv. λ&body.
+      !!&new_menv = @purple_menv_with_env(menv)(#CON{vx, cenv});
+      self(new_menv)(body)
     _ : @pink_err(#app)
   }(vf)
 
@@ -915,6 +924,132 @@
     _ : λ&u. eval_fn(menv)(rest)
   }(vf)
 
+// =============================================================================
+// Delimited Continuations via CPS Transformation
+// =============================================================================
+//
+// Purple implements delimited continuations (reset/control) using a CPS-style
+// evaluator. The key insight is that HVM4's interaction nets are fundamentally
+// lambda calculus, so continuations can be captured as native lambdas.
+//
+// How it works:
+// 1. (reset body) enters CPS evaluation mode via @purple_eval_cps
+// 2. In CPS mode, every expression takes an explicit continuation parameter k
+// 3. (control k body) captures k as #KontCps{lambda} and binds it
+// 4. When the captured continuation is called, it invokes the lambda directly
+//
+// Example: (reset (+ 10 (control k (+ (k 3) (k 5))))) => 28
+//   - Entering reset: call @purple_eval_cps with identity continuation (λv. v)
+//   - Evaluating (+ 10 _): k becomes (λv. (+ 10 v)) in CPS
+//   - control captures k as #KontCps{λv. #Cst{(10 + v)}}
+//   - (k 3) calls the lambda with 3 → #Cst{13}
+//   - (k 5) calls the lambda with 5 → #Cst{15}
+//   - (+ 13 15) → 28
+//
+// This approach:
+// - Captures full continuation context (not just arithmetic frames)
+// - Supports multiple calls to the same continuation
+// - Works with nested function calls and control flow
+// - Leverages HVM4's native lambda mechanism for efficiency
+//
+// Value types:
+// - #CloCps{env, body}: Closure created inside reset (evaluated in CPS mode)
+// - #KontCps{k}: Captured continuation (k is a native HVM lambda)
+
+// Helper to unwrap #Cst
+@purple_unwrap_cst = λv. λ{#Cst: λ&n. n; _ : 0}(v)
+
+// CPS evaluator - takes menv, expression, and continuation k
+@purple_eval_cps = λm. λexp. λk.
+  %menv = m; %kont = k; %e = exp;
+  λ{#MEnv: λ&env. λ&handlers. λ&parent. λ&level.
+    λ{
+      #Lit: λ&n. (kont(#Cst{n}))
+
+      #Var: λ&n. (kont(@pink_env_get(env)(n)))
+
+      #Lam: λ&body. (kont(#CloCps{env, body}))
+
+      #App: λ&f. λ&x.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(f)(λvf.
+          @purple_eval_cps(#MEnv{env, handlers, parent, level})(x)(λvx.
+            @purple_apply_cps(#MEnv{env, handlers, parent, level})(vf)(vx)(kont)))
+
+      #Add: λ&a. λ&b.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(a)(λva.
+          @purple_eval_cps(#MEnv{env, handlers, parent, level})(b)(λvb.
+            (kont(#Cst{(@purple_unwrap_cst(va) + @purple_unwrap_cst(vb))}))))
+
+      #Sub: λ&a. λ&b.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(a)(λva.
+          @purple_eval_cps(#MEnv{env, handlers, parent, level})(b)(λvb.
+            (kont(#Cst{(@purple_unwrap_cst(va) - @purple_unwrap_cst(vb))}))))
+
+      #Mul: λ&a. λ&b.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(a)(λva.
+          @purple_eval_cps(#MEnv{env, handlers, parent, level})(b)(λvb.
+            (kont(#Cst{(@purple_unwrap_cst(va) * @purple_unwrap_cst(vb))}))))
+
+      #If: λ&c. λ&t. λ&e.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(c)(λvc.
+          λ{
+            #Cst: λ&n. λ{
+              0: @purple_eval_cps(#MEnv{env, handlers, parent, level})(e)(kont)
+              _ : @purple_eval_cps(#MEnv{env, handlers, parent, level})(t)(kont)
+            }(n)
+            _ : @pink_err(#if)
+          }(vc))
+
+      #Let: λ&val. λ&body.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(val)(λvv.
+          @purple_eval_cps(#MEnv{#CON{vv, env}, handlers, parent, level})(body)(kont))
+
+      // Nested reset - creates new delimiter
+      #Prmt: λ&body.
+        !!&result = @purple_eval_cps(#MEnv{env, handlers, parent, level})(body)(λv. v);
+        (kont(result))
+
+      // Control - capture the continuation!
+      #Ctrl: λ&k_idx. λ&body.
+        // kont is the current continuation (a native HVM lambda)
+        // Wrap it as a callable Purple value
+        !!&k_val = #KontCps{kont};
+        // Evaluate body with k bound, using identity continuation
+        // (the body's result becomes the reset's result)
+        @purple_eval_cps(#MEnv{#CON{k_val, env}, handlers, parent, level})(body)(λv. v)
+
+      // For other forms, fall back to direct evaluation then continue
+      _ : (kont(@purple_eval(#MEnv{env, handlers, parent, level})(e)))
+    }(e)
+  ; _ : @pink_err(#cps)}(menv)
+
+// CPS application - handles CPS closures and captured continuations
+@purple_apply_cps = λm. λvf. λvx. λk.
+  %menv = m; %kont = k; %arg = vx; %func = vf;
+  λ{
+    // CPS closure created inside reset
+    #CloCps: λ&cenv. λ&body.
+      λ{#MEnv: λ&env. λ&handlers. λ&parent. λ&level.
+        @purple_eval_cps(#MEnv{#CON{arg, cenv}, handlers, parent, level})(body)(kont)
+      ; _ : @pink_err(#app)}(menv)
+
+    // Captured continuation - call it!
+    #KontCps: λ&saved_k.
+      // Apply saved continuation to argument, then pass result to current k
+      !!&result = (saved_k(arg));
+      (kont(result))
+
+    // Regular closure from outside reset
+    #Clo: λ&cenv. λ&body.
+      λ{#MEnv: λ&env. λ&handlers. λ&parent. λ&level.
+        // Evaluate body in direct style, then continue
+        !!&result = @purple_eval(#MEnv{#CON{arg, cenv}, handlers, parent, level})(body);
+        (kont(result))
+      ; _ : @pink_err(#app)}(menv)
+
+    _ : @pink_err(#app)
+  }(func)
+
 // Purple evaluator - uses MOV for efficient bindings, direct @-recursion
 // NOTE: Uses single-destructure pattern to avoid menv duplication issues in HVM4
 @purple_eval = λm. λexp.
@@ -974,7 +1109,7 @@
         !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
-          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na + nb)}; _ : @pink_err(#add)}(vb)
+          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na + nb)}; #Cod: λ&cb. #Cod{#Add{#Lit{na}, cb}}; _ : @pink_err(#add)}(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Add{ca, cb}}; _ : @pink_err(#add)}(vb)
           _ : @pink_err(#add)
         }(va)
@@ -982,7 +1117,7 @@
         !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
-          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na - nb)}; _ : @pink_err(#sub)}(vb)
+          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na - nb)}; #Cod: λ&cb. #Cod{#Sub{#Lit{na}, cb}}; _ : @pink_err(#sub)}(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Sub{ca, cb}}; _ : @pink_err(#sub)}(vb)
           _ : @pink_err(#sub)
         }(va)
@@ -990,7 +1125,7 @@
         !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
-          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na * nb)}; _ : @pink_err(#mul)}(vb)
+          #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na * nb)}; #Cod: λ&cb. #Cod{#Mul{#Lit{na}, cb}}; _ : @pink_err(#mul)}(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Mul{ca, cb}}; _ : @pink_err(#mul)}(vb)
           _ : @pink_err(#mul)
         }(va)
@@ -1248,6 +1383,13 @@
         !!&vf = @purple_eval(#MEnv{env, handlers, parent, level})(f);
         !!&vargs = @purple_eval(#MEnv{env, handlers, parent, level})(args);
         @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
+      // Delimited continuations - reset enters CPS evaluation mode
+      // This allows control to capture the continuation as a native lambda
+      #Prmt: λ&body.
+        @purple_eval_cps(#MEnv{env, handlers, parent, level})(body)(λv. v)
+      // Control outside reset is an error
+      #Ctrl: λ&k_idx. λ&body.
+        @pink_err(#ctrl)
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)

@@ -1,0 +1,4 @@
+; Basic reset/control test
+; (reset (+ 1 (control k 42))) => 42
+; The control aborts to reset, returning 42 directly
+(reset (+ 1 (control k 42)))

@@ -1,0 +1,3 @@
+; Simplest reset/control test - control at top level
+; (reset (control k 42)) => 42
+(reset (control k 42))

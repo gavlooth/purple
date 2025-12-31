@@ -1,0 +1,6 @@
+; Test calling the continuation with captured context
+; (reset (+ 10 (control k (+ (k 3) 2)))) => 15
+; k captures (+ 10 _) as continuation
+; k(3) = 10 + 3 = 13
+; 13 + 2 = 15
+(reset (+ 10 (control k (+ (k 3) 2))))

@@ -21,8 +21,7 @@
 
 10. ~~Include path tracking leaks memory across parses~~ (FIXED): `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter (src/parse/_.c:2305-2311).
 
-11. FFI string extraction truncates silently at 4096 bytes and casts codepoints to `char`, so Unicode or NUL characters are corrupted and long strings are cut off. (src/run/_.c:42-67)
-   - Fix idea: return a heap buffer with length, or accept UTF-8 bytes and stop only at list end.
+11. ~~FFI string extraction truncates silently at 4096 bytes and casts codepoints to `char`~~ (FIXED): `ffi_extract_string` now properly encodes Unicode codepoints as UTF-8 with correct multi-byte sequences (src/run/_.c:44-89). Buffer size is still 4096 bytes but now correctly handles all valid Unicode codepoints.
 
 12. Runtime path resolution depends on `argv0`; if `realpath(argv0)` fails (e.g., invoked via PATH), `sys_path_join` uses the current working directory and can’t locate `lib/runtime.hvm4`. (src/main.c:17-23, src/run/_.c:206-213)
    - Fix idea: use `/proc/self/exe` (Linux) or `realpath` of the executable via platform-specific APIs, or embed/require an absolute runtime path.
@@ -40,3 +39,4 @@
 - #10 Include path memory leak: `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter.
 - #4 Include cycle tracking cap: `purple_mark_included` now errors out if the 256 path limit is exceeded.
 - #9 Include buffer allocation: `purple_expand_includes` now checks for `malloc`/`realloc` failure via `purple_grow_buffer` helper.
+- #11 FFI string UTF-8: `ffi_extract_string` now properly encodes Unicode codepoints as UTF-8 instead of truncating to single bytes.

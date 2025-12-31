@@ -42,6 +42,7 @@ fn void ffi_names_init(void) {
 }
 
 // Extract string from HVM4 cons list of CHR
+// Properly encodes Unicode codepoints as UTF-8
 fn char* ffi_extract_string(Term lst) {
   static char buf[4096];
   u32 i = 0;
@@ -59,8 +60,27 @@ fn char* ffi_extract_string(Term lst) {
     // head should be #CHR{codepoint}
     if (term_tag(head) >= C00 && term_tag(head) <= C16 && term_ext(head) == NAM_CHR) {
       u32 cp = term_val(HEAP[term_val(head)]);
-      if (i < sizeof(buf) - 1) {
-        buf[i++] = (char)cp;
+      // Encode codepoint as UTF-8
+      if (cp < 0x80) {
+        if (i < sizeof(buf) - 1) buf[i++] = (char)cp;
+      } else if (cp < 0x800) {
+        if (i < sizeof(buf) - 2) {
+          buf[i++] = (char)(0xC0 | (cp >> 6));
+          buf[i++] = (char)(0x80 | (cp & 0x3F));
+        }
+      } else if (cp < 0x10000) {
+        if (i < sizeof(buf) - 3) {
+          buf[i++] = (char)(0xE0 | (cp >> 12));
+          buf[i++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+          buf[i++] = (char)(0x80 | (cp & 0x3F));
+        }
+      } else if (cp < 0x110000) {
+        if (i < sizeof(buf) - 4) {
+          buf[i++] = (char)(0xF0 | (cp >> 18));
+          buf[i++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+          buf[i++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+          buf[i++] = (char)(0x80 | (cp & 0x3F));
+        }
       }
     }
     cur = tail;

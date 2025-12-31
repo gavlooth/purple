@@ -1,0 +1,360 @@
+; Purple Standard Library Prelude
+; Core functions for building languages on top of Purple
+;
+; Include this in your programs: (include "lib/prelude.purple")
+
+; =============================================================================
+; List Operations
+; =============================================================================
+
+; Length of a list
+(letrec ((length (lambda (lst)
+  (match lst
+    (#NIL 0)
+    ((CON _ t) (+ 1 (length t)))))))
+
+; Map function over list
+(letrec ((map (lambda (f lst)
+  (match lst
+    (#NIL nil)
+    ((CON h t) (cons (f h) (map f t)))))))
+
+; Filter list by predicate
+(letrec ((filter (lambda (pred lst)
+  (match lst
+    (#NIL nil)
+    ((CON h t)
+      (if (pred h)
+          (cons h (filter pred t))
+          (filter pred t)))))))
+
+; Left fold
+(letrec ((foldl (lambda (f acc lst)
+  (match lst
+    (#NIL acc)
+    ((CON h t) (foldl f (f acc h) t))))))
+
+; Right fold
+(letrec ((foldr (lambda (f acc lst)
+  (match lst
+    (#NIL acc)
+    ((CON h t) (f h (foldr f acc t)))))))
+
+; Append two lists
+(letrec ((append (lambda (a b)
+  (match a
+    (#NIL b)
+    ((CON h t) (cons h (append t b)))))))
+
+; Reverse a list
+(letrec ((reverse (lambda (lst)
+  (foldl (lambda (acc x) (cons x acc)) nil lst))))
+
+; Nth element (0-indexed)
+(letrec ((nth (lambda (n lst)
+  (match lst
+    (#NIL nil)
+    ((CON h t)
+      (if (= n 0)
+          h
+          (nth (- n 1) t)))))))
+
+; Take first n elements
+(letrec ((take (lambda (n lst)
+  (if (<= n 0)
+      nil
+      (match lst
+        (#NIL nil)
+        ((CON h t) (cons h (take (- n 1) t))))))))
+
+; Drop first n elements
+(letrec ((drop (lambda (n lst)
+  (if (<= n 0)
+      lst
+      (match lst
+        (#NIL nil)
+        ((CON _ t) (drop (- n 1) t)))))))
+
+; Zip two lists into pairs
+(letrec ((zip (lambda (a b)
+  (match a
+    (#NIL nil)
+    ((CON ha ta)
+      (match b
+        (#NIL nil)
+        ((CON hb tb) (cons (cons ha hb) (zip ta tb)))))))))
+
+; Flatten a list of lists
+(letrec ((flatten (lambda (lst)
+  (match lst
+    (#NIL nil)
+    ((CON h t) (append h (flatten t)))))))
+
+; FlatMap (map then flatten)
+(letrec ((flatmap (lambda (f lst)
+  (flatten (map f lst)))))
+
+; Any element satisfies predicate
+(letrec ((any (lambda (pred lst)
+  (match lst
+    (#NIL 0)
+    ((CON h t)
+      (if (pred h) 1 (any pred t)))))))
+
+; All elements satisfy predicate
+(letrec ((all (lambda (pred lst)
+  (match lst
+    (#NIL 1)
+    ((CON h t)
+      (if (pred h) (all pred t) 0))))))
+
+; Range of integers [a, b]
+(letrec ((range (lambda (a b)
+  (if (> a b)
+      nil
+      (cons a (range (+ a 1) b))))))
+
+; =============================================================================
+; Higher-Order Functions
+; =============================================================================
+
+; Identity function
+(letrec ((identity (lambda (x) x)))
+
+; Constant function
+(letrec ((const (lambda (a b) a)))
+
+; Flip argument order
+(letrec ((flip (lambda (f a b) (f b a))))
+
+; Function composition
+(letrec ((compose (lambda (f g)
+  (lambda (x) (f (g x))))))
+
+; Partial application (1 arg)
+(letrec ((partial (lambda (f x)
+  (lambda (y) (f x y)))))
+
+; Apply function to list of args (simple version)
+(letrec ((apply1 (lambda (f args)
+  (match args
+    (#NIL f)
+    ((CON h t) (apply1 (f h) t))))))
+
+; =============================================================================
+; Numeric Functions
+; =============================================================================
+
+; Absolute value
+(letrec ((abs (lambda (n)
+  (if (< n 0) (- 0 n) n))))
+
+; Minimum of two values
+(letrec ((min (lambda (a b)
+  (if (< a b) a b))))
+
+; Maximum of two values
+(letrec ((max (lambda (a b)
+  (if (> a b) a b))))
+
+; Clamp value to range
+(letrec ((clamp (lambda (lo hi n)
+  (min hi (max lo n)))))
+
+; Sign of number: -1, 0, or 1
+(letrec ((sign (lambda (n)
+  (if (< n 0) (- 0 1)
+      (if (> n 0) 1 0)))))
+
+; Even predicate
+(letrec ((even? (lambda (n)
+  (= 0 (mod n 2)))))
+
+; Odd predicate
+(letrec ((odd? (lambda (n)
+  (= 1 (mod n 2)))))
+
+; Zero predicate
+(letrec ((zero? (lambda (n)
+  (= n 0))))
+
+; Positive predicate
+(letrec ((positive? (lambda (n)
+  (> n 0))))
+
+; Negative predicate
+(letrec ((negative? (lambda (n)
+  (< n 0))))
+
+; GCD using Euclidean algorithm
+(letrec ((gcd (lambda (a b)
+  (if (= b 0)
+      a
+      (gcd b (mod a b))))))
+
+; LCM
+(letrec ((lcm (lambda (a b)
+  (/ (* a b) (gcd a b)))))
+
+; Power (integer exponent)
+(letrec ((pow (lambda (base exp)
+  (if (<= exp 0)
+      1
+      (* base (pow base (- exp 1)))))))
+
+; Factorial
+(letrec ((factorial (lambda (n)
+  (if (<= n 1)
+      1
+      (* n (factorial (- n 1)))))))
+
+; Fibonacci
+(letrec ((fib (lambda (n)
+  (if (<= n 1)
+      n
+      (+ (fib (- n 1)) (fib (- n 2)))))))
+
+; Sum of list
+(letrec ((sum (lambda (lst)
+  (foldl (lambda (a b) (+ a b)) 0 lst))))
+
+; Product of list
+(letrec ((product (lambda (lst)
+  (foldl (lambda (a b) (* a b)) 1 lst))))
+
+; =============================================================================
+; Boolean Operations
+; =============================================================================
+
+; XOR
+(letrec ((xor (lambda (a b)
+  (and (or a b) (not (and a b))))))
+
+; Implies (a -> b)
+(letrec ((implies (lambda (a b)
+  (or (not a) b))))
+
+; =============================================================================
+; Maybe/Option type operations
+; =============================================================================
+
+; Nothing = #NIL, Just x = #Just{x}
+
+(letrec ((just (lambda (x) `(Just ,x))))
+(letrec ((nothing (lambda (x) nil)))
+
+(letrec ((maybe (lambda (default f opt)
+  (match opt
+    (#NIL default)
+    ((Just x) (f x))
+    (_ default)))))
+
+(letrec ((from-maybe (lambda (default opt)
+  (maybe default identity opt))))
+
+; =============================================================================
+; Delimited Continuations (CPS-based control flow)
+; =============================================================================
+
+; Purple provides delimited continuations via reset/control:
+;
+; (reset expr)       - establish a continuation boundary
+; (control k body)   - capture continuation up to nearest reset as k
+;
+; The continuation k is a function that represents "the rest of the
+; computation" up to the reset boundary.
+;
+; Example - early return:
+;   (reset (+ 1 (control k 42)))  ; => 42 (ignores continuation)
+;   (reset (+ 1 (control k (k 10))))  ; => 11 (uses continuation)
+;
+; Example - generators:
+;   (reset (do (yield 1) (yield 2) (yield 3)))
+;   where (yield x) = (control k (cons x (k nil)))
+;
+; Example - exceptions:
+;   (reset (try-expr))
+;   where fail = (control k error-value)
+
+; Generator helper - yield a value
+(letrec ((yield (lambda (x)
+  (control k (cons x (k nil))))))
+
+; Exception-like early exit
+(letrec ((abort (lambda (x)
+  (control k x))))
+
+; Call with captured continuation (abortive)
+(letrec ((call/cc (lambda (f)
+  (control k (f k)))))
+
+; =============================================================================
+; Parallel and Nondeterministic Operations (HVM4 native)
+; =============================================================================
+
+; Purple provides parallel evaluation via par:
+;
+; (par a b)   - evaluate a and b in parallel, return pair
+;
+; Example:
+;   (let ((results (par (fib 35) (fib 36))))
+;     (+ (fst results) (snd results)))
+;
+; Purple provides nondeterminism via amb:
+;
+; (amb a b)   - nondeterministic choice (HVM4 superposition)
+;
+; When the result is collapsed (using -C flag), both branches are enumerated.
+;
+; Example:
+;   (amb 1 2)  ; => 1 or 2 (both when collapsed)
+;   (+ 10 (amb 1 2))  ; => 11 or 12
+
+; Choose from a list (nondeterministic)
+(letrec ((choose (lambda (lst)
+  (match lst
+    (#NIL (control k nil))
+    ((CON h t) (amb h (choose t)))))))
+
+; Guard condition (fail if false)
+(letrec ((guard (lambda (cond)
+  (if cond nil (control k nil)))))
+
+; =============================================================================
+; Tower/Meta operations helpers
+; =============================================================================
+
+; Execute at meta-level and get result
+(letrec ((meta-eval (lambda (expr)
+  (EM expr))))
+
+; Get handler by name
+(letrec ((get-handler (lambda (name)
+  (get-meta name))))
+
+; Set handler
+(letrec ((set-handler (lambda (name h)
+  (set-meta! name h))))
+
+; Call default handler
+(letrec ((call-default (lambda (name arg)
+  (default-handler name arg))))
+
+; =============================================================================
+; Utility macros (if macro system available)
+; =============================================================================
+
+; when - conditional with side effects
+; (when cond body...) -> (if cond (do body...) nil)
+
+; unless - inverse conditional
+; (unless cond body...) -> (if cond nil (do body...))
+
+; cond - multi-way conditional
+; (cond (test1 result1) (test2 result2) (else default))
+
+; let* - sequential let bindings
+; (let* ((x 1) (y (+ x 1))) body)
+
+; Return the prelude loaded indicator
+'prelude-loaded))))))))))))))))))))))))))))))))))))))))))))))))))))))

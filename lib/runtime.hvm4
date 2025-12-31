@@ -1331,6 +1331,11 @@
         // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
         // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
         λ{#Cod: λ&code. @purple_eval(#MEnv{env, handlers, parent, level})(code); λ&u. @purple_eval(#MEnv{env, handlers, parent, level})(ve)}(ve)
+      // Macroexpand: evaluate to produce code, but return the code without evaluating it
+      #MExp: λ&e.
+        !!&ve = @purple_eval(#MEnv{env, handlers, parent, level})(e);
+        // Return the code representation, don't evaluate it
+        λ{#Cod: λ&code. code; λ&u. ve}(ve)
       #MLvl: #Cst{level}
       #Shft: λ&n. λ&e.
         !!&vn = @purple_eval(#MEnv{env, handlers, parent, level})(n);
@@ -1452,6 +1457,19 @@
       // Control outside reset is an error
       #Ctrl: λ&k_idx. λ&body.
         @pink_err(#ctrl)
+      // Parallel evaluation - HVM4 evaluates both lazily/in parallel
+      // Returns a pair (cons cell) of both results
+      #Par: λ&a. λ&b.
+        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
+        #CON{va, vb}
+      // Nondeterministic choice - HVM4 superposition
+      // When collapsed, enumerates both possibilities
+      // Uses dynamic superposition syntax &(label){a, b}
+      #Amb: λ&a. λ&b.
+        !!&va = @purple_eval(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
+        &(0){va, vb}
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)
@@ -1675,6 +1693,11 @@
         !!&ve = @purple_evalc(#MEnv{env, handlers, parent, level})(e);
         // If result is #Cod{code}, evaluate code; otherwise evaluate ve as syntax
         λ{#Cod: λ&code. @purple_evalc(#MEnv{env, handlers, parent, level})(code); _ : @purple_evalc(#MEnv{env, handlers, parent, level})(ve)}(ve)
+      // Macroexpand: evaluate to produce code, but return the code without evaluating it
+      #MExp: λ&e.
+        !!&ve = @purple_evalc(#MEnv{env, handlers, parent, level})(e);
+        // Return the code representation, don't evaluate it
+        λ{#Cod: λ&code. @pink_lift(code); λ&u. @pink_lift(ve)}(ve)
       #MLvl: @pink_lift(#Cst{level})
       #Shft: λ&n. λ&e.
         !!&vn = @purple_evalc(#MEnv{env, handlers, parent, level})(n);
@@ -1780,6 +1803,19 @@
         !!&vf = @purple_evalc(#MEnv{env, handlers, parent, level})(f);
         !!&vargs = @purple_evalc(#MEnv{env, handlers, parent, level})(args);
         @purple_apply_to_list(#MEnv{env, handlers, parent, level})(vf)(vargs)
+      // Parallel evaluation - HVM4 evaluates both lazily/in parallel
+      // Returns a pair (cons cell) of both results
+      #Par: λ&a. λ&b.
+        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
+        #CON{va, vb}
+      // Nondeterministic choice - HVM4 superposition
+      // When collapsed, enumerates both possibilities
+      // Uses dynamic superposition syntax &(label){a, b}
+      #Amb: λ&a. λ&b.
+        !!&va = @purple_evalc(#MEnv{env, handlers, parent, level})(a);
+        !!&vb = @purple_evalc(#MEnv{env, handlers, parent, level})(b);
+        &(0){va, vb}
       _ : @pink_err(#pexp)
     }(exp)
   ; _ : @pink_err(#menv)}(menv)

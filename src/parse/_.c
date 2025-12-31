@@ -110,6 +110,10 @@ static u32 PURPLE_NAM_CTRL;   // Ctrl (control/shift)
 // Fixed-point numbers
 static u32 PURPLE_NAM_FIX;    // Fix{value, scale}
 
+// Parallel primitives (HVM4 native)
+static u32 PURPLE_NAM_PAR;    // Par{a, b} - parallel evaluation
+static u32 PURPLE_NAM_AMB;    // Amb{a, b} - nondeterminism (SUP)
+
 fn u32 purple_nick(const char *name) {
   u32 k = 0;
   for (u32 i = 0; name[i] != '\0'; i++) {
@@ -209,6 +213,8 @@ fn void purple_names_init(void) {
   PURPLE_NAM_CTRL   = purple_nick("Ctrl");
   // Fixed-point numbers
   PURPLE_NAM_FIX    = purple_nick("Fix");
+  PURPLE_NAM_PAR    = purple_nick("Par");
+  PURPLE_NAM_AMB    = purple_nick("Amb");
   PURPLE_NAMES_READY = 1;
 }
 
@@ -741,6 +747,17 @@ fn Term purple_term_prompt(Term e) {
 // Control: (control k expr) -> captures continuation to k and evaluates expr
 fn Term purple_term_control(Term k_var, Term body) {
   return purple_ctr2(PURPLE_NAM_CTRL, k_var, body);
+}
+
+// Parallel primitives
+// Par: (par a b) -> evaluate both in parallel, return pair
+fn Term purple_term_par(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_PAR, a, b);
+}
+
+// Amb: (amb a b) -> nondeterministic choice (HVM4 superposition)
+fn Term purple_term_amb(Term a, Term b) {
+  return purple_ctr2(PURPLE_NAM_AMB, a, b);
 }
 
 fn Term purple_term_ctag(Term e) {
@@ -1391,6 +1408,22 @@ fn Term purple_parse_control(PState *s) {
   return purple_term_control(purple_term_var(0), body);
 }
 
+// (par a b) -> evaluate both in parallel, return pair
+fn Term purple_parse_par(PState *s) {
+  Term a = parse_purple_form(s);
+  Term b = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_par(a, b);
+}
+
+// (amb a b) -> nondeterministic choice (HVM4 superposition)
+fn Term purple_parse_amb(PState *s) {
+  Term a = parse_purple_form(s);
+  Term b = parse_purple_form(s);
+  parse_consume(s, ")");
+  return purple_term_amb(a, b);
+}
+
 fn Term purple_parse_ctag(PState *s) {
   Term e = parse_purple_form(s);
   parse_consume(s, ")");
@@ -2009,6 +2042,13 @@ fn Term parse_purple_list(PState *s) {
     }
     if (purple_symbol_is(s, start, len, "control")) {
       return purple_parse_control(s);
+    }
+    // Parallel primitives
+    if (purple_symbol_is(s, start, len, "par")) {
+      return purple_parse_par(s);
+    }
+    if (purple_symbol_is(s, start, len, "amb")) {
+      return purple_parse_amb(s);
     }
     if (purple_symbol_is(s, start, len, "ctr-tag")) {
       return purple_parse_ctag(s);

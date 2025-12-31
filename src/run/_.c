@@ -68,9 +68,18 @@ fn char* ffi_extract_string(Term lst) {
 }
 
 // Extract integer from value
+// Handles both raw NUM and #Cst{n} wrapper
 fn int ffi_extract_int(Term v) {
   if (term_tag(v) == NUM) {
     return (int)term_val(v);
+  }
+  // Check for #Cst{n} wrapper (nick("Cst") = 120020)
+  if (term_tag(v) >= C00 && term_tag(v) <= C16 && term_ext(v) == 120020) {
+    u32 loc = term_val(v);
+    Term inner = HEAP[loc];
+    if (term_tag(inner) == NUM) {
+      return (int)term_val(inner);
+    }
   }
   return 0;
 }

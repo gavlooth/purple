@@ -38,3 +38,4 @@
 
 - Include path buffer overflow risk in `src/parse/_.c`: Fixed by adding a check to ensure `path_len` fits in the buffer before `memcpy`.
 - Compiler pattern match buffer overflow in `src/compile/_.c`: Fixed by increasing `var_names` buffer to 64 and adding a bounds check.
+- FFI integer args ignored (bug #1): Fixed `ffi_extract_int` to unwrap `#Cst{n}` wrapper by checking for constructor tag 120020 (nick("Cst")) and extracting the inner number.

@@ -466,9 +466,9 @@ fn double ffi_extract_double(Term v) {
 
     // #Fix{hi, lo, scale} - convert to double
     if (nam == FFI_NAM_FIX) {
-      Term hi_term = HEAP[loc];
-      Term lo_term = HEAP[loc + 1];
-      Term scale_term = HEAP[loc + 2];
+      Term hi_term = wnf(HEAP[loc]);
+      Term lo_term = wnf(HEAP[loc + 1]);
+      Term scale_term = wnf(HEAP[loc + 2]);
 
       u32 hi = (term_tag(hi_term) == NUM) ? term_val(hi_term) : 0;
       u32 lo = (term_tag(lo_term) == NUM) ? term_val(lo_term) : 0;
@@ -939,6 +939,204 @@ fn Term ffi_eval_code(Term code) {
   return ffi_process(result);
 }
 
+// Pretty-print a Purple result value
+// Recursively normalizes thunks and prints in a readable format
+fn void purple_print_result(Term t) {
+  // Normalize to weak head normal form first
+  t = wnf(t);
+  u8 tag = term_tag(t);
+
+  // Raw numbers
+  if (tag == NUM) {
+    printf("%u", term_val(t));
+    return;
+  }
+
+  // Constructors
+  if (tag >= C00 && tag <= C16) {
+    u32 nam = term_ext(t);
+    u32 loc = term_val(t);
+
+    // #Cst{n} - unwrap to number
+    if (nam == FFI_NAM_CST) {
+      Term inner = wnf(HEAP[loc]);
+      if (term_tag(inner) == NUM) {
+        printf("%u", term_val(inner));
+      } else {
+        print_term(inner);
+      }
+      return;
+    }
+
+    // #Fix{hi, lo, scale} - print as decimal
+    if (nam == FFI_NAM_FIX) {
+      double d = ffi_extract_double(t);
+      printf("%g", d);
+      return;
+    }
+
+    // #Ptr{hi, lo} - print as hex pointer
+    if (nam == FFI_NAM_PTR) {
+      void* p = ffi_extract_pointer(t);
+      printf("#<ptr %p>", p);
+      return;
+    }
+
+    // #Sym{s} - print as symbol
+    if (nam == purple_nick("Sym")) {
+      Term inner = wnf(HEAP[loc]);
+      if (term_tag(inner) == NUM) {
+        u32 sym_id = term_val(inner);
+        // Convert nick back to string if possible
+        if (sym_id < 10000000) {
+          // It's a nick-encoded symbol
+          char buf[5] = {0};
+          u32 v = sym_id;
+          for (int i = 3; i >= 0; i--) {
+            u32 c = v % 64;
+            v /= 64;
+            if (c == 0) buf[i] = 0;
+            else if (c < 27) buf[i] = 'a' + c - 1;
+            else if (c < 53) buf[i] = 'A' + c - 27;
+            else if (c < 63) buf[i] = '0' + c - 53;
+            else buf[i] = '_';
+          }
+          // Skip leading nulls
+          char* s = buf;
+          while (*s == 0 && s < buf + 4) s++;
+          printf("'%s", s);
+        } else {
+          // Gensym
+          printf("'#g%u", sym_id - 10000000);
+        }
+      } else {
+        printf("#<sym>");
+      }
+      return;
+    }
+
+    // #CHR{c} - print as character
+    if (nam == NAM_CHR) {
+      Term inner = wnf(HEAP[loc]);
+      if (term_tag(inner) == NUM) {
+        u32 c = term_val(inner);
+        if (c >= 32 && c < 127) {
+          printf("#\\%c", (char)c);
+        } else {
+          printf("#\\x%x", c);
+        }
+      } else {
+        printf("#<chr>");
+      }
+      return;
+    }
+
+    // #NIL - print as empty list
+    if (nam == NAM_NIL) {
+      printf("[]");
+      return;
+    }
+
+    // #CON{a, b} - print as list if it looks like one
+    if (nam == NAM_CON) {
+      Term head = HEAP[loc];
+      Term tail = HEAP[loc + 1];
+
+      // Check if this looks like a list (tail is NIL or another CON)
+      Term nt = wnf(tail);
+      u8 ttag = term_tag(nt);
+      int is_list = (ttag >= C00 && ttag <= C16 &&
+                     (term_ext(nt) == NAM_NIL || term_ext(nt) == NAM_CON));
+
+      // Also check if it looks like a string (head is CHR)
+      Term nh = wnf(head);
+      int is_string = (term_tag(nh) >= C00 && term_tag(nh) <= C16 &&
+                       term_ext(nh) == NAM_CHR);
+
+      if (is_string && is_list) {
+        // Print as string
+        printf("\"");
+        Term cur = t;
+        while (term_tag(cur) >= C00 && term_tag(cur) <= C16 && term_ext(cur) == NAM_CON) {
+          u32 cloc = term_val(cur);
+          Term ch = wnf(HEAP[cloc]);
+          if (term_tag(ch) >= C00 && term_ext(ch) == NAM_CHR) {
+            Term cv = wnf(HEAP[term_val(ch)]);
+            if (term_tag(cv) == NUM) {
+              u32 c = term_val(cv);
+              if (c == '"') printf("\\\"");
+              else if (c == '\\') printf("\\\\");
+              else if (c == '\n') printf("\\n");
+              else if (c >= 32 && c < 127) printf("%c", (char)c);
+              else printf("\\x%02x", c);
+            }
+          }
+          cur = wnf(HEAP[cloc + 1]);
+        }
+        printf("\"");
+        return;
+      }
+
+      if (is_list) {
+        // Print as list
+        printf("[");
+        Term cur = t;
+        int first = 1;
+        while (term_tag(cur) >= C00 && term_tag(cur) <= C16 && term_ext(cur) == NAM_CON) {
+          u32 cloc = term_val(cur);
+          if (!first) printf(", ");
+          first = 0;
+          purple_print_result(HEAP[cloc]);
+          cur = wnf(HEAP[cloc + 1]);
+        }
+        printf("]");
+        return;
+      }
+
+      // Print as pair
+      printf("(");
+      purple_print_result(head);
+      printf(" . ");
+      purple_print_result(tail);
+      printf(")");
+      return;
+    }
+
+    // #Clo, #CloR - closures
+    if (nam == purple_nick("Clo") || nam == purple_nick("CloR")) {
+      printf("#<closure>");
+      return;
+    }
+
+    // #Cod{e} - code
+    if (nam == purple_nick("Cod")) {
+      printf("#<code>");
+      return;
+    }
+
+    // #Err{msg}
+    if (nam == purple_nick("Err")) {
+      printf("#<error: ");
+      purple_print_result(HEAP[loc]);
+      printf(">");
+      return;
+    }
+
+    // #Traced{v}
+    if (nam == purple_nick("Trcd")) {
+      printf("#<traced: ");
+      purple_print_result(HEAP[loc]);
+      printf(">");
+      return;
+    }
+
+    // Default: fall through to print_term
+  }
+
+  // Fallback: use HVM4's print_term
+  print_term(t);
+}
+
 // Read runtime and emit it
 fn void emit_runtime(FILE *out, const char *argv0) {
   char runtime_path[4096];
@@ -1118,11 +1316,9 @@ int main(int argc, char **argv) {
 
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    // Print final result (if not unit)
-    if (term_tag(result) != NUM || term_val(result) != 0) {
-      print_term(result);
-      printf("\n");
-    }
+    // Print final result
+    purple_print_result(result);
+    printf("\n");
 
     if (show_stats) {
       double dt = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;

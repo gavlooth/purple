@@ -1236,6 +1236,7 @@
         !!&vb = @purple_eval(#MEnv{env, handlers, parent, level})(b);
         λ{
           #Cst: λ&na. λ{#Cst: λ&nb. #Cst{(na / nb)}; _ : @pink_err(#div)}(vb)
+          #Fix: λ&h1. λ&l1. λ&s1. @fix_div(#Fix{h1, l1, s1})(vb)
           #Cod: λ&ca. λ{#Cod: λ&cb. #Cod{#Div{ca, cb}}; _ : @pink_err(#div)}(vb)
           _ : @pink_err(#div)
         }(va)
@@ -1834,18 +1835,42 @@
 // Quasiquote Processing
 // =============================================================================
 
+// Convert a value back to code representation
+// #Cst{n} -> #Lit{n}, #Sym{s} -> #Sym{s}, etc.
+@purple_value_to_code = λ&v.
+  λ{
+    #Cst: λ&n. #Lit{n}
+    #Sym: λ&s. #Sym{s}
+    #CHR: λ&c. #CHR{c}
+    #NIL: #NIL
+    #CON: λ&a. λ&b.
+      !!&ca = @purple_value_to_code(a);
+      !!&cb = @purple_value_to_code(b);
+      #CON{ca, cb}
+    #Cod: λ&code. code
+    λ&u. v
+  }(v)
+
 // Process a quasiquoted expression - converts to code representation
 // When encountering #UQ{e}, evaluate e and splice the result
 // When encountering #UQS{e} in a list context, evaluate e and splice elements
 @purple_qq_process = λmenv. λ&eval_fn. λexp.
   !!&m = menv; !!&evf = eval_fn; %e = exp;
   λ{
-    // Unquote: evaluate and splice result
+    // Unquote: evaluate and splice result, converting values to code
     // If result is #Cod{e}, unwrap to e (for macro expansion)
+    // If result is #Cst{n}, convert to #Lit{n} so it's valid code
     #UQ: λ&inner.
       !!&v = evf(m)(inner);
-      // NOTE: Must use λ&u. instead of _ : to properly consume the matched value in HVM4
-      λ{#Cod: λ&code. code; λ&u. v}(v)
+      λ{
+        #Cod: λ&code. code
+        #Cst: λ&n. #Lit{n}
+        #Sym: λ&s. #Sym{s}
+        #CHR: λ&c. #CHR{c}
+        #NIL: #NIL
+        #CON: λ&a. λ&b. #CON{@purple_value_to_code(a), @purple_value_to_code(b)}
+        λ&u. v
+      }(v)
     // Unquote-splicing outside list context is an error
     #UQS: λ&inner.
       @pink_err(#uqs)
@@ -2063,38 +2088,38 @@
     #Ptr: λ&hi. λ&lo. #Ptr{hi, lo}
     #Sym: λ&s. #Sym{s}
     #CHR: λ&c. #CHR{c}
-    #CON: λ&a. λ&b. #CON{@purple_unwrap(a), @purple_unwrap(b)}
+    #CON: λ&a. λ&b. !!&ua = @purple_unwrap(a); !!&ub = @purple_unwrap(b); #CON{ua, ub}
     #NIL: #NIL
     #Cod: λ&e. #Cod{e}
     #Clo: λ&env. λ&body. #Clo{env, body}
     #CloR: λ&env. λ&body. #CloR{env, body}
     #MEnv: λ&e.λ&h.λ&p.λ&l. #MEnv{e, h, p, l}
-    #FFI: λ&name. λ&args. #FFI{name, @purple_unwrap_list(args)}
-    #Do: λ&first. λ&rest. #Do{@purple_unwrap(first), @purple_unwrap(rest)}
-    #WMnv: λ&m. λ&b. #WMnv{@purple_unwrap(m), @purple_unwrap(b)}
-    #DefH: λ&n. λ&a. #DefH{@purple_unwrap(n), @purple_unwrap(a)}
-    #ErrR: λ&m. #ErrR{@purple_unwrap(m)}
-    #Err: λ&m. #Err{@purple_unwrap(m)}
-    #Try: λ&e. λ&h. #Try{@purple_unwrap(e), @purple_unwrap(h)}
-    #Asrt: λ&c. λ&m. #Asrt{@purple_unwrap(c), @purple_unwrap(m)}
-    #Trce: λ&e. #Trce{@purple_unwrap(e)}
-    #Traced: λ&v. #Traced{@purple_unwrap(v)}
+    #FFI: λ&name. λ&args. !!&uargs = @purple_unwrap_list(args); #FFI{name, uargs}
+    #Do: λ&first. λ&rest. !!&uf = @purple_unwrap(first); !!&ur = @purple_unwrap(rest); #Do{uf, ur}
+    #WMnv: λ&m. λ&b. !!&um = @purple_unwrap(m); !!&ub = @purple_unwrap(b); #WMnv{um, ub}
+    #DefH: λ&n. λ&a. !!&un = @purple_unwrap(n); !!&ua = @purple_unwrap(a); #DefH{un, ua}
+    #ErrR: λ&m. !!&um = @purple_unwrap(m); #ErrR{um}
+    #Err: λ&m. !!&um = @purple_unwrap(m); #Err{um}
+    #Try: λ&e. λ&h. !!&ue = @purple_unwrap(e); !!&uh = @purple_unwrap(h); #Try{ue, uh}
+    #Asrt: λ&c. λ&m. !!&uc = @purple_unwrap(c); !!&um = @purple_unwrap(m); #Asrt{uc, um}
+    #Trce: λ&e. !!&ue = @purple_unwrap(e); #Trce{ue}
+    #Traced: λ&v. !!&uv = @purple_unwrap(v); #Traced{uv}
     // AST nodes that may appear in unevaluated code (for FFI continuations)
     #Lit: λ&n. #Lit{n}
     #Var: λ&n. #Var{n}
-    #Lam: λ&b. #Lam{@purple_unwrap(b)}
-    #App: λ&f. λ&x. #App{@purple_unwrap(f), @purple_unwrap(x)}
-    #Let: λ&v. λ&b. #Let{@purple_unwrap(v), @purple_unwrap(b)}
-    #If: λ&c. λ&t. λ&e. #If{@purple_unwrap(c), @purple_unwrap(t), @purple_unwrap(e)}
-    #Add: λ&a. λ&b. #Add{@purple_unwrap(a), @purple_unwrap(b)}
-    #Sub: λ&a. λ&b. #Sub{@purple_unwrap(a), @purple_unwrap(b)}
-    #Mul: λ&a. λ&b. #Mul{@purple_unwrap(a), @purple_unwrap(b)}
+    #Lam: λ&b. !!&ub = @purple_unwrap(b); #Lam{ub}
+    #App: λ&f. λ&x. !!&uf = @purple_unwrap(f); !!&ux = @purple_unwrap(x); #App{uf, ux}
+    #Let: λ&v. λ&b. !!&uv = @purple_unwrap(v); !!&ub = @purple_unwrap(b); #Let{uv, ub}
+    #If: λ&c. λ&t. λ&e. !!&uc = @purple_unwrap(c); !!&ut = @purple_unwrap(t); !!&ue = @purple_unwrap(e); #If{uc, ut, ue}
+    #Add: λ&a. λ&b. !!&ua = @purple_unwrap(a); !!&ub = @purple_unwrap(b); #Add{ua, ub}
+    #Sub: λ&a. λ&b. !!&ua = @purple_unwrap(a); !!&ub = @purple_unwrap(b); #Sub{ua, ub}
+    #Mul: λ&a. λ&b. !!&ua = @purple_unwrap(a); !!&ub = @purple_unwrap(b); #Mul{ua, ub}
     _ : @pink_err(#punw)
   }(v)
 
 @purple_unwrap_list = λ&lst.
   λ{
     #NIL: #NIL
-    #CON: λ&h. λ&t. #CON{@purple_unwrap(h), @purple_unwrap_list(t)}
+    #CON: λ&h. λ&t. !!&uh = @purple_unwrap(h); !!&ut = @purple_unwrap_list(t); #CON{uh, ut}
     _ : lst
   }(lst)

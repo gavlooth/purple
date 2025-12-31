@@ -1947,6 +1947,8 @@ fn Term purple_parse_prim2(PState *s, u32 nam) {
     return purple_term_compose(a, b);
   } else if (nam == PURPLE_NAM_APPL) {
     return purple_term_apply_list(a, b);
+  } else if (nam == PURPLE_NAM_SEQ) {
+    return purple_term_seq(a, b);
   } else {
     fprintf(stderr, "PURPLE_ERROR: unknown binary primitive\n");
     exit(1);
@@ -1983,6 +1985,12 @@ fn Term purple_parse_prim1(PState *s, u32 nam) {
     return purple_term_reverse(a);
   } else if (nam == PURPLE_NAM_FLIP) {
     return purple_term_flip(a);
+  } else if (nam == PURPLE_NAM_QQ) {
+    return purple_term_qq(a);
+  } else if (nam == PURPLE_NAM_UQ) {
+    return purple_term_uq(a);
+  } else if (nam == PURPLE_NAM_UQS) {
+    return purple_term_uqs(a);
   } else {
     fprintf(stderr, "PURPLE_ERROR: unknown unary primitive\n");
     exit(1);
@@ -2157,6 +2165,18 @@ fn Term parse_purple_list(PState *s) {
     if (purple_symbol_is(s, start, len, "not")) {
       return purple_parse_prim1(s, PURPLE_NAM_NOT);
     }
+    if (purple_symbol_is(s, start, len, "eq?") || purple_symbol_is(s, start, len, "symbol-eq")) {
+      return purple_parse_prim2(s, PURPLE_NAM_SEQ);
+    }
+    if (purple_symbol_is(s, start, len, "quasiquote")) {
+      return purple_parse_prim1(s, PURPLE_NAM_QQ);
+    }
+    if (purple_symbol_is(s, start, len, "unquote")) {
+      return purple_parse_prim1(s, PURPLE_NAM_UQ);
+    }
+    if (purple_symbol_is(s, start, len, "unquote-splicing")) {
+      return purple_parse_prim1(s, PURPLE_NAM_UQS);
+    }
     if (purple_symbol_is(s, start, len, "cons")) {
       return purple_parse_prim2(s, PURPLE_NAM_CON);
     }
@@ -2178,6 +2198,9 @@ fn Term parse_purple_list(PState *s) {
       return purple_parse_prim2(s, PURPLE_NAM_FLTR);
     }
     if (purple_symbol_is(s, start, len, "fold")) {
+      return purple_parse_prim3(s, PURPLE_NAM_FOLD);
+    }
+    if (purple_symbol_is(s, start, len, "foldr")) {
       return purple_parse_prim3(s, PURPLE_NAM_FOLD);
     }
     if (purple_symbol_is(s, start, len, "foldl")) {

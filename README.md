@@ -24,6 +24,9 @@ cd src && clang -O2 -o ../purple main.c && cd ..
 
 # Build Purple runner (with FFI support)
 cd src/run && clang -O2 -o ../../purple-run _.c && cd ../..
+
+# Build Purple REPL (interactive tower exploration)
+cd src/repl && clang -O2 -o ../../purple-repl _.c && cd ../..
 ```
 
 ## Usage
@@ -35,6 +38,9 @@ cd src/run && clang -O2 -o ../../purple-run _.c && cd ../..
 
 # Or use purple-run for FFI support
 ./purple-run program.purple
+
+# Interactive REPL
+./purple-repl
 ```
 
 ## Language Features
@@ -178,6 +184,72 @@ nil                         ; Empty list
     (+ 1 2)))  ; Prints "add called", returns 3
 ```
 
+## Interactive REPL
+
+The REPL provides interactive tower exploration:
+
+```
+$ ./purple-repl
+Purple REPL v0.1 - Type :help for commands
+Tower of Interpreters ready.
+
+purple> (+ 1 2)
+3
+purple> (meta-level)
+0
+purple> (EM (meta-level))
+1
+purple> (with-handlers ((lit (lambda (x) (* 10 x)))) (+ 1 2))
+30
+purple> :quit
+```
+
+Commands:
+- `:help` - Show help
+- `:quit` - Exit REPL
+- `:level` - Show current meta-level
+- `:tower` - Run tower demo
+- `:load <file>` - Load and run a file
+
+## Building Languages on Purple
+
+Purple's tower architecture lets you build custom languages by intercepting evaluation:
+
+```lisp
+;; Traced language - log all operations
+(with-handlers
+  ((lit (lambda (x)
+    (do (ffi "puts" "literal evaluated")
+        (default-handler 'lit x)))))
+  (+ 1 2))
+
+;; Typed language - check types at runtime
+(with-handlers
+  ((app (lambda (args)
+    (if (type-ok? args)
+        (default-handler 'app args)
+        (error 'type-error)))))
+  program)
+```
+
+See `examples/` for complete DSL implementations:
+- `lang_typed.purple` - Runtime type checking
+- `lang_lazy.purple` - Lazy evaluation
+- `lang_logic.purple` - Logic programming with backtracking
+- `lang_traced.purple` - Evaluation tracing
+- `lang_symbolic.purple` - Symbolic computation
+
+## Standard Library
+
+Include the prelude for common functions:
+
+```lisp
+(include "lib/prelude.purple")
+
+;; Now you have: map, filter, fold, append, reverse,
+;; compose, partial, range, factorial, fib, etc.
+```
+
 ## Project Structure
 
 ```
@@ -186,9 +258,12 @@ purple/
 │   ├── main.c              # Compiler entry point
 │   ├── parse/_.c           # Purple parser
 │   ├── compile/_.c         # Compiler to HVM4
-│   └── run/_.c             # Purple runner with FFI
+│   ├── run/_.c             # Purple runner with FFI
+│   └── repl/_.c            # Interactive REPL
 ├── lib/
-│   └── runtime.hvm4        # Purple runtime
+│   ├── runtime.hvm4        # Purple runtime
+│   └── prelude.purple      # Standard library
+├── examples/               # Example DSL languages
 ├── test/
 │   ├── run.sh              # Test runner
 │   └── cases/              # Test files (.purple)
@@ -200,7 +275,7 @@ purple/
 
 ```bash
 ./test/run.sh
-# Passed: 73, Failed: 0
+# Passed: 142, Failed: 1
 ```
 
 ## References

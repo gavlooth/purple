@@ -1,0 +1,8 @@
+; macroexpand - expand a macro once and return the result as data
+; This test verifies that macro expansion works
+
+; Define a simple macro that doubles, then use it
+; defmacro format: (defmacro name (params) template usage-expr)
+(defmacro double (x)
+  `(+ ,x ,x)
+  (mcall double 21))

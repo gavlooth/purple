@@ -2302,10 +2302,18 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
   return out;
 }
 
+fn void purple_reset_includes(void) {
+  for (u32 i = 0; i < PURPLE_INCLUDED_LEN; i++) {
+    free(PURPLE_INCLUDED[i]);
+    PURPLE_INCLUDED[i] = NULL;
+  }
+  PURPLE_INCLUDED_LEN = 0;
+}
+
 fn Term parse_purple(PState *s) {
   purple_names_init();
   PURPLE_BINDS_LEN = 0;
-  PURPLE_INCLUDED_LEN = 0;
+  purple_reset_includes();
 
   // Expand includes before parsing
   char *expanded = purple_expand_includes(s->src, s->len, s->file);

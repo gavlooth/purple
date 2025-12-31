@@ -20,8 +20,7 @@
 9. Include expansion grows buffers with `malloc/realloc` without checking for failure and uses `u32 cap` arithmetic that can overflow on large inputs, leading to NULL deref or buffer mis-sizing. (src/parse/_.c:2076-2179)
    - Fix idea: check allocation results and use `size_t` for `cap`/`out_len` with overflow checks.
 
-10. Include path tracking leaks memory across parses: `purple_mark_included` uses `strdup` and the pointers are never freed even when `PURPLE_INCLUDED_LEN` resets. (src/parse/_.c:2068-2199)
-   - Fix idea: free `PURPLE_INCLUDED[i]` before resetting, or store paths in a transient arena.
+10. ~~Include path tracking leaks memory across parses~~ (FIXED): `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter (src/parse/_.c:2305-2311).
 
 11. FFI string extraction truncates silently at 4096 bytes and casts codepoints to `char`, so Unicode or NUL characters are corrupted and long strings are cut off. (src/run/_.c:42-67)
    - Fix idea: return a heap buffer with length, or accept UTF-8 bytes and stop only at list end.
@@ -39,3 +38,4 @@
 - Include path buffer overflow risk in `src/parse/_.c`: Fixed by adding a check to ensure `path_len` fits in the buffer before `memcpy`.
 - Compiler pattern match buffer overflow in `src/compile/_.c`: Fixed by increasing `var_names` buffer to 64 and adding a bounds check.
 - #3 Include expansion in strings/comments: `purple_expand_includes` now skips string literals and line comments when looking for `(include ...)` directives.
+- #10 Include path memory leak: `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter.

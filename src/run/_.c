@@ -547,6 +547,10 @@ fn Term ffi_wrap_pointer(void* ptr) {
 fn Term ffi_execute(Term name_term, Term args) {
   // Get function name from table
   u32 name_id = term_val(name_term);
+  if (name_id >= BOOK_CAP) {
+    fprintf(stderr, "FFI: function ID %u out of bounds\n", name_id);
+    return term_new_num(0);
+  }
   const char *name = TABLE[name_id];
 
   if (!name) {

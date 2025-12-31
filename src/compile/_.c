@@ -535,7 +535,7 @@ fn void purple_compile_emit_term(PurpleEmit *e, Term t) {
   // References
   if (tag == REF) {
     u32 id = term_val(t);
-    const char *name = TABLE[id];
+    const char *name = (id < BOOK_CAP) ? TABLE[id] : NULL;
     if (name) {
       fprintf(e->out, "@%s", name);
     } else {

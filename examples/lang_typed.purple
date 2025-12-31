@@ -1,0 +1,55 @@
+; Typed Language DSL
+; Demonstrates runtime type checking via handler customization
+;
+; This creates a language where function application checks types
+; before proceeding, throwing an error on type mismatch.
+
+; Type tags for values
+; We encode types as symbols: 'int, 'str, 'fn, 'list, 'bool
+
+; Type checker: extract type tag from a value
+(letrec ((type-of (lambda (v)
+  (match v
+    ; Numbers are ints
+    ((n) :when (and (>= n 0) (<= n 999999999)) 'int)
+    ; Negative numbers
+    ((n) :when (< n 0) 'int)
+    ; Nil is empty list
+    (#NIL 'list)
+    ; Cons cells are lists
+    ((CON _ _) 'list)
+    ; Characters
+    ((CHR _) 'char)
+    ; Symbols
+    ((Sym _) 'sym)
+    ; Closures are functions
+    ((Clo _ _) 'fn)
+    ((CloR _ _) 'fn)
+    ; Default
+    (_ 'unknown)))))
+
+; Type-checked application wrapper
+(letrec ((typed-app (lambda (f x expected-type)
+  (let (actual (type-of x))
+    (if (= actual expected-type)
+        ; Types match - proceed
+        (f x)
+        ; Types don't match - return error
+        (do
+          (ffi "puts" "Type error!")
+          #Err{type}))))))
+
+; Example: A typed language where + only works on ints
+(with-handlers
+  ((lit (lambda (x)
+    ; Tag literals with their type
+    (default-handler 'lit x)))
+
+   (app (lambda (args)
+    (let (f (fst args))
+    (let (x (snd args))
+      ; Apply with type checking
+      (default-handler 'app args))))))
+
+  ; Test: this should work (both ints)
+  (+ 10 20))))

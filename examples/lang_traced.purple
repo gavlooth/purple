@@ -1,0 +1,37 @@
+; Traced Language DSL
+; Demonstrates evaluation tracing via handler customization
+;
+; This creates a language that logs all operations,
+; useful for debugging and understanding evaluation.
+
+; Trace wrapper - intercepts all major operations
+(with-handlers
+  ; Trace literal evaluation
+  ((lit (lambda (x)
+    (do
+      (ffi "print" "LIT: ")
+      (let (v (default-handler 'lit x))
+        (do
+          (ffi "puts" "")
+          v)))))
+
+   ; Trace variable lookup
+   (var (lambda (args)
+    (let (idx (fst args))
+    (let (env (snd args))
+      (do
+        (ffi "puts" "VAR lookup")
+        (default-handler 'var args))))))
+
+   ; Trace function application
+   (app (lambda (args)
+    (do
+      (ffi "puts" "APP: calling function")
+      (let (result (default-handler 'app args))
+        (do
+          (ffi "puts" "APP: returned")
+          result))))))
+
+  ; Test expression - will show trace
+  (let (double (lambda (x) (+ x x)))
+    (double 21)))

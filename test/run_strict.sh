@@ -35,6 +35,10 @@ for test in "$PURPLE_DIR"/test/cases/*.purple; do
       expected="${expected#"${expected%%[![:space:]]*}"}"
     elif [[ "$line" == ERROR:* ]]; then
       expected_kind="error"
+    else
+      # Treat raw expected value (without EXPECT: prefix) as expected output
+      expected_kind="expect"
+      expected="$line"
     fi
   fi
 

@@ -1,0 +1,62 @@
+; Logic/Backtracking Language DSL
+; Demonstrates non-deterministic choice via handler customization
+;
+; This creates a mini logic programming language with:
+; - amb: non-deterministic choice
+; - fail: signal failure, trigger backtracking
+; - require: assert a condition, fail if false
+
+; In a full implementation, amb would use continuations to
+; try each alternative. Here we simulate with list-based search.
+
+; amb-list: return all possible values
+(letrec ((amb-list (lambda (choices)
+  ; Return list of all choices
+  choices)))
+
+; require: filter choices that satisfy predicate
+(letrec ((require (lambda (pred choices)
+  (filter pred choices))))
+
+; fail: return empty list (no solutions)
+(letrec ((fail (lambda () nil)))
+
+; Example: Find pythagorean triples
+; In full logic language: (let x (amb 1 2 3 4 5))
+;                        (let y (amb 1 2 3 4 5))
+;                        (let z (amb 1 2 3 4 5))
+;                        (require (= (+ (* x x) (* y y)) (* z z)))
+;                        (list x y z)
+
+; Simulated version using list comprehension style
+(letrec ((range (lambda (a b)
+  (if (> a b)
+      nil
+      (cons a (range (+ a 1) b))))))
+
+(letrec ((flatmap (lambda (f lst)
+  (match lst
+    (#NIL nil)
+    ((CON h t) (append (f h) (flatmap f t)))))))
+
+(letrec ((pythagorean-triples (lambda (n)
+  (flatmap (lambda (x)
+    (flatmap (lambda (y)
+      (flatmap (lambda (z)
+        (if (= (+ (* x x) (* y y)) (* z z))
+            (cons (cons x (cons y (cons z nil))) nil)
+            nil))
+        (range y n)))
+      (range x n)))
+    (range 1 n)))))
+
+; Demo: Handler-based amb (simplified)
+; This shows how handlers could intercept 'amb' operations
+(with-handlers
+  ((lit (lambda (x)
+    ; Literals evaluate normally
+    (default-handler 'lit x))))
+
+  ; Find pythagorean triples up to 15
+  ; (3,4,5), (5,12,13), (6,8,10), (8,15,17), (9,12,15)
+  (length (pythagorean-triples 15)))))))

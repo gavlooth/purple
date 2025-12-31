@@ -1,0 +1,55 @@
+; Lazy Language DSL
+; Demonstrates lazy evaluation via handler customization
+;
+; This creates a language where arguments are only evaluated when needed,
+; by wrapping them in thunks (delayed computations).
+
+; Thunk constructor - wraps unevaluated expression
+; #Thunk{expr, env} - a suspended computation
+
+; Force evaluation of a thunk
+(letrec ((force (lambda (t)
+  (match t
+    ; Already a value (number) - return it
+    ((n) :when (>= n 0) n)
+    ((n) :when (< n 0) n)
+    ; Thunks need to be forced (would need env access)
+    (_ t)))))
+
+; Lazy infinite list of integers starting from n
+(letrec ((integers-from (lambda (n)
+  ; Lazy cons: second element is unevaluated
+  (cons n (lambda (_) (integers-from (+ n 1)))))))
+
+; Take first n elements from a lazy list
+(letrec ((take (lambda (n lst)
+  (if (<= n 0)
+      nil
+      (match lst
+        (#NIL nil)
+        ((CON h t)
+          ; t might be a thunk (lambda)
+          (let (rest (if (= 1 1) t t))  ; identity to preserve
+            (cons h (take (- n 1)
+              ; Force the tail if it's a lambda
+              (match rest
+                ((Clo _ _) (rest 0))
+                ((CloR _ _) (rest 0))
+                (_ rest)))))))))))
+
+; Demo: Lazy semantics via handlers
+; When arguments would diverge, laziness saves us
+(with-handlers
+  ((app (lambda (args)
+    (let (f (fst args))
+    (let (x (snd args))
+      ; Could wrap x in thunk here for full laziness
+      ; For now, just demonstrate the pattern
+      (default-handler 'app args))))))
+
+  ; Example: conditionals are lazy in then/else
+  ; This works because (if true x diverge) doesn't eval diverge
+  (if 1
+      42
+      ; This branch is never evaluated
+      (letrec ((loop (lambda (x) (loop x)))) (loop 0))))

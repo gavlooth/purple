@@ -1,0 +1,72 @@
+; Symbolic Computation Language DSL
+; Demonstrates symbolic/algebraic computation via handlers
+;
+; This creates a language that manipulates symbolic expressions
+; instead of computing numeric results.
+
+; Symbolic expression constructors
+; #SAdd{a, b} - symbolic addition
+; #SMul{a, b} - symbolic multiplication
+; #SVar{name} - symbolic variable
+; #SNum{n}    - numeric constant
+
+; Create symbolic variable
+(letrec ((sym-var (lambda (name)
+  `(SVar ,name))))
+
+; Create symbolic number
+(letrec ((sym-num (lambda (n)
+  `(SNum ,n))))
+
+; Symbolic addition
+(letrec ((sym-add (lambda (a b)
+  ; Simplify if both numeric
+  (match a
+    ((SNum na)
+      (match b
+        ((SNum nb) `(SNum ,(+ na nb)))
+        (_ `(SAdd ,a ,b))))
+    (_ `(SAdd ,a ,b))))))
+
+; Symbolic multiplication
+(letrec ((sym-mul (lambda (a b)
+  ; Simplify if both numeric
+  (match a
+    ((SNum na)
+      (match b
+        ((SNum nb) `(SNum ,(* na nb)))
+        ; Multiply by 0
+        (_ (if (= na 0) `(SNum 0) `(SMul ,a ,b)))))
+    (_ `(SMul ,a ,b))))))
+
+; Symbolic differentiation
+(letrec ((diff (lambda (expr var)
+  (match expr
+    ; d/dx(n) = 0
+    ((SNum _) `(SNum 0))
+    ; d/dx(x) = 1, d/dx(y) = 0
+    ((SVar v) (if (= v var) `(SNum 1) `(SNum 0)))
+    ; d/dx(a + b) = d/dx(a) + d/dx(b)
+    ((SAdd a b) (sym-add (diff a var) (diff b var)))
+    ; d/dx(a * b) = a * d/dx(b) + b * d/dx(a)  (product rule)
+    ((SMul a b) (sym-add (sym-mul a (diff b var))
+                         (sym-mul b (diff a var))))
+    (_ `(SNum 0))))))
+
+; Demo: Symbolic language via handlers
+; Arithmetic operations build symbolic trees instead of computing
+(with-handlers
+  ((lit (lambda (x)
+    ; Literals become symbolic numbers
+    `(SNum ,(default-handler 'lit x)))))
+
+  ; Build expression: x^2 + 2x + 1 at x=3
+  ; First symbolically, then evaluate
+  (let (x (sym-var 'x))
+    ; Derivative of x^2 + 2x + 1 is 2x + 2
+    (let (expr (sym-add (sym-mul x x)
+                        (sym-add (sym-mul `(SNum 2) x)
+                                 `(SNum 1))))
+      (let (deriv (diff expr 'x))
+        ; Return the derivative expression
+        deriv))))))

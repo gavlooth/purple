@@ -16,6 +16,12 @@ fn void purple_usage(const char *prog) {
 
 fn void purple_runtime_path(char *out, int size, const char *argv0) {
   char *abs = realpath(argv0, NULL);
+#ifdef __linux__
+  // On Linux, use /proc/self/exe as fallback when realpath(argv0) fails
+  if (!abs) {
+    abs = realpath("/proc/self/exe", NULL);
+  }
+#endif
   const char *base = abs ? abs : argv0;
   sys_path_join(out, size, base, "lib/runtime.hvm4");
   if (abs) {

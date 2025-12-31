@@ -266,6 +266,12 @@ fn Term ffi_eval_code(Term code) {
 fn void emit_runtime(FILE *out, const char *argv0) {
   char runtime_path[4096];
   char *abs = realpath(argv0, NULL);
+#ifdef __linux__
+  // On Linux, use /proc/self/exe as fallback when realpath(argv0) fails
+  if (!abs) {
+    abs = realpath("/proc/self/exe", NULL);
+  }
+#endif
   const char *base = abs ? abs : argv0;
   sys_path_join(runtime_path, sizeof(runtime_path), base, "lib/runtime.hvm4");
   if (abs) free(abs);

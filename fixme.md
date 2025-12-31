@@ -23,8 +23,7 @@
 
 11. ~~FFI string extraction truncates silently at 4096 bytes and casts codepoints to `char`~~ (FIXED): `ffi_extract_string` now properly encodes Unicode codepoints as UTF-8 with correct multi-byte sequences (src/run/_.c:44-89). Buffer size is still 4096 bytes but now correctly handles all valid Unicode codepoints.
 
-12. Runtime path resolution depends on `argv0`; if `realpath(argv0)` fails (e.g., invoked via PATH), `sys_path_join` uses the current working directory and can’t locate `lib/runtime.hvm4`. (src/main.c:17-23, src/run/_.c:206-213)
-   - Fix idea: use `/proc/self/exe` (Linux) or `realpath` of the executable via platform-specific APIs, or embed/require an absolute runtime path.
+12. ~~Runtime path resolution depends on `argv0`; if `realpath(argv0)` fails (e.g., invoked via PATH), `sys_path_join` uses the current working directory and can't locate `lib/runtime.hvm4`.~~ (FIXED): On Linux, now uses `/proc/self/exe` as fallback when `realpath(argv0)` fails (src/main.c:17-30, src/run/_.c:266-277).
 
 # Fixed Bugs
 
@@ -40,3 +39,4 @@
 - #4 Include cycle tracking cap: `purple_mark_included` now errors out if the 256 path limit is exceeded.
 - #9 Include buffer allocation: `purple_expand_includes` now checks for `malloc`/`realloc` failure via `purple_grow_buffer` helper.
 - #11 FFI string UTF-8: `ffi_extract_string` now properly encodes Unicode codepoints as UTF-8 instead of truncating to single bytes.
+- #12 Runtime path resolution: On Linux, uses `/proc/self/exe` as fallback when `realpath(argv0)` fails.

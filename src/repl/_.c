@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <unistd.h>
 
 // Include HVM4 runtime
 #include "../../hvm4/clang/hvm4.c"
@@ -452,7 +453,7 @@ static volatile int running = 1;
 
 fn void signal_handler(int sig) {
   (void)sig;
-  printf("\n");
+  write(STDOUT_FILENO, "\n", 1);
   running = 1;
 }
 

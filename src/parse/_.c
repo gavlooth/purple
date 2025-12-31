@@ -2146,12 +2146,29 @@ fn void purple_mark_included(const char *path) {
   PURPLE_INCLUDED[PURPLE_INCLUDED_LEN++] = strdup(path);
 }
 
+// Helper to grow buffer with error checking
+fn char* purple_grow_buffer(char *buf, u32 *cap) {
+  u32 new_cap = *cap * 2;
+  char *new_buf = realloc(buf, new_cap);
+  if (!new_buf) {
+    free(buf);
+    fprintf(stderr, "PURPLE_ERROR: out of memory during include expansion\n");
+    exit(1);
+  }
+  *cap = new_cap;
+  return new_buf;
+}
+
 // Process includes by text substitution
 // Returns a new source string with includes expanded
 fn char* purple_expand_includes(const char *src, u32 len, const char *base_path) {
   // Estimate expanded size (may grow)
   u32 cap = len * 2 + 4096;
   char *out = malloc(cap);
+  if (!out) {
+    fprintf(stderr, "PURPLE_ERROR: out of memory during include expansion\n");
+    exit(1);
+  }
   u32 out_len = 0;
 
   u32 pos = 0;
@@ -2160,31 +2177,27 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
     if (src[pos] == '"') {
       // Copy string literal verbatim
       if (out_len + 1 >= cap) {
-        cap *= 2;
-        out = realloc(out, cap);
+        out = purple_grow_buffer(out, &cap);
       }
       out[out_len++] = src[pos++];
       while (pos < len && src[pos] != '"') {
         if (src[pos] == '\\' && pos + 1 < len) {
           // Copy escape sequence
           if (out_len + 2 >= cap) {
-            cap *= 2;
-            out = realloc(out, cap);
+            out = purple_grow_buffer(out, &cap);
           }
           out[out_len++] = src[pos++];
           out[out_len++] = src[pos++];
         } else {
           if (out_len + 1 >= cap) {
-            cap *= 2;
-            out = realloc(out, cap);
+            out = purple_grow_buffer(out, &cap);
           }
           out[out_len++] = src[pos++];
         }
       }
       if (pos < len) {
         if (out_len + 1 >= cap) {
-          cap *= 2;
-          out = realloc(out, cap);
+          out = purple_grow_buffer(out, &cap);
         }
         out[out_len++] = src[pos++]; // closing quote
       }
@@ -2194,8 +2207,7 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
     if (src[pos] == ';' || (src[pos] == '/' && pos + 1 < len && src[pos + 1] == '/')) {
       while (pos < len && src[pos] != '\n') {
         if (out_len + 1 >= cap) {
-          cap *= 2;
-          out = realloc(out, cap);
+          out = purple_grow_buffer(out, &cap);
         }
         out[out_len++] = src[pos++];
       }
@@ -2280,8 +2292,7 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
 
         // Grow output buffer if needed
         while (out_len + exp_len + 1024 > cap) {
-          cap *= 2;
-          out = realloc(out, cap);
+          out = purple_grow_buffer(out, &cap);
         }
 
         // Append expanded content
@@ -2293,8 +2304,7 @@ fn char* purple_expand_includes(const char *src, u32 len, const char *base_path)
     } else {
       // Regular character - copy it
       if (out_len + 1 >= cap) {
-        cap *= 2;
-        out = realloc(out, cap);
+        out = purple_grow_buffer(out, &cap);
       }
       out[out_len++] = src[pos++];
     }

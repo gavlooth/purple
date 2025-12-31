@@ -17,8 +17,7 @@
 
 8. ~~Native match compilation treats `#Case` as 2-arg~~ (FIXED): The native match emission now correctly reads the body from arg2 of the 3-arg `#Case{pattern, guard, body}` (src/compile/_.c:439).
 
-9. Include expansion grows buffers with `malloc/realloc` without checking for failure and uses `u32 cap` arithmetic that can overflow on large inputs, leading to NULL deref or buffer mis-sizing. (src/parse/_.c:2076-2179)
-   - Fix idea: check allocation results and use `size_t` for `cap`/`out_len` with overflow checks.
+9. ~~Include expansion grows buffers without checking for allocation failure~~ (FIXED): `purple_expand_includes` now uses a `purple_grow_buffer` helper that checks for `malloc`/`realloc` failure and exits with an error message if allocation fails (src/parse/_.c:2149-2160, 2167-2171).
 
 10. ~~Include path tracking leaks memory across parses~~ (FIXED): `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter (src/parse/_.c:2305-2311).
 
@@ -40,3 +39,4 @@
 - #3 Include expansion in strings/comments: `purple_expand_includes` now skips string literals and line comments when looking for `(include ...)` directives.
 - #10 Include path memory leak: `purple_reset_includes` now frees all `strdup`'d paths before resetting the counter.
 - #4 Include cycle tracking cap: `purple_mark_included` now errors out if the 256 path limit is exceeded.
+- #9 Include buffer allocation: `purple_expand_includes` now checks for `malloc`/`realloc` failure via `purple_grow_buffer` helper.

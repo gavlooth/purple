@@ -63,24 +63,7 @@ Missing handlers for: add, sub, mul, div, mod, and, or, not, lt, gt, le, ge, eql
 
 ## Minor Issues
 
-### 4. Or-Pattern Only Binds First Alternative's Variables
-
-**File:** `src/parse/_.c:1433-1438`
-
-```c
-case PURPLE_NAM_POR:
-  // Only processes first alternative
-  purple_bind_pattern_vars(term_get_arg(pattern, 0));
-  break;
-```
-
-**Impact:** If or-pattern alternatives have different variable sets, binding is incomplete.
-
-**Fix:** Validate all alternatives bind same variables, or collect union of bindings.
-
----
-
-### 5. Test Coverage Gaps
+### 4. Test Coverage Gaps
 
 **Directory:** `test/cases/`
 
@@ -100,6 +83,16 @@ case PURPLE_NAM_POR:
 Previously `purple_symbol_term` returned table indices for unbound symbols instead of nick-encoded values.
 
 **Status:** Fixed - now computes nick encoding from source string.
+
+---
+
+### ~~Or-Pattern Only Binds First Alternative's Variables~~ (FIXED)
+
+**File:** `src/parse/_.c:1484-1516`
+
+Previously or-patterns only collected bindings from the first alternative, causing incomplete bindings when alternatives had different variable sets.
+
+**Status:** Fixed - `purple_bind_pattern_vars` now validates that all alternatives bind the same variables in the same order (lines 1489-1510), then binds from the first alternative. Mismatched bindings cause a compile error.
 
 ---
 
@@ -123,9 +116,9 @@ The following issues from the original analysis were determined to be false posi
 |----------|-------|--------|
 | Critical | 1 | Open |
 | Medium | 2 | Open |
-| Minor | 2 | Open |
-| Resolved | 1 | Fixed |
+| Minor | 1 | Open |
+| Resolved | 2 | Fixed |
 
 ---
 
-*Last updated: 2024-12-30*
+*Last updated: 2025-12-31*

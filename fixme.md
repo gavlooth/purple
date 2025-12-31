@@ -12,8 +12,7 @@
 
 6. ~~`purple-run` never calls `heap_init_slices()`~~ (FIXED): `heap_init_slices()` is now called at line 291 after allocating HEAP/BOOK/TABLE (src/run/_.c:291).
 
-7. Native match optimization ignores nested constructor patterns: the parser allows nested patterns, but `purple_match_needs_runtime` only checks the top-level `#PCtr` and then emits a native matcher that binds only positional args. Nested constraints are silently dropped, producing wrong matches/bindings. (src/parse/_.c:1239-1391, src/compile/_.c:301-356)
-   - Fix idea: detect non-trivial subpatterns in constructor args (nested `#PCtr`, `#PLit`, `#POr`, `#PAs`, etc.) and force runtime matching.
+7. ~~Native match optimization ignores nested constructor patterns~~ (FIXED): `purple_pattern_args_need_runtime` now correctly detects non-PVar patterns (including nested `#PCtr`, `#PLit`, `#POr`, `#PAs`, `#PWld`) in constructor arguments via `purple_pattern_arg_is_var` check (src/compile/_.c:214-240), forcing runtime matching when present (src/compile/_.c:381-382).
 
 8. ~~Native match compilation treats `#Case` as 2-arg~~ (FIXED): The native match emission now correctly reads the body from arg2 of the 3-arg `#Case{pattern, guard, body}` (src/compile/_.c:439).
 
@@ -40,3 +39,4 @@
 - #9 Include buffer allocation: `purple_expand_includes` now checks for `malloc`/`realloc` failure via `purple_grow_buffer` helper.
 - #11 FFI string UTF-8: `ffi_extract_string` now properly encodes Unicode codepoints as UTF-8 instead of truncating to single bytes.
 - #12 Runtime path resolution: On Linux, uses `/proc/self/exe` as fallback when `realpath(argv0)` fails.
+- #7 Nested constructor patterns: `purple_pattern_args_need_runtime` correctly detects non-PVar patterns and forces runtime matching.

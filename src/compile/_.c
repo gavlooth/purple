@@ -379,7 +379,7 @@ fn int purple_match_needs_runtime(Term cases) {
             if (pnam == PURPLEC_NAM_PCTR) {
               // Check if has arguments
               Term args = purple_ctr_arg(pattern, 1);
-              if (term_tag(args) >= C00) {
+              if (term_tag(args) >= C00 && term_tag(args) <= C16) {
                 u32 anam = term_ext(args);
                 if (anam == PURPLEC_NAM_CON) has_ctr_with_args = 1;
               }

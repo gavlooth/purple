@@ -7,7 +7,7 @@ Goal (one per run):
 
 Constraints:
 - Follow all project constraints in CLAUDE.md and AGENTS.md .
-- do not touch hvm4 repo
+- do not touch fix or modify hvm4 submodule
 - Do not refactor broadly or change architecture.
 - Do not add new features.
 - run git commit and push; .

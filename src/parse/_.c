@@ -2365,7 +2365,7 @@ fn Term parse_purple_form(PState *s) {
     parse_advance(s);
     return parse_purple_list(s);
   }
-  if (isdigit(c) || (c == '.' && isdigit(s->src[s->pos + 1]))) {
+  if (isdigit(c) || (c == '.' && s->pos + 1 < s->len && isdigit(s->src[s->pos + 1]))) {
     int64_t fix_value;
     u32 fix_scale, int_val;
     if (purple_parse_numeric(s, &fix_value, &fix_scale, &int_val)) {

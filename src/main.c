@@ -55,6 +55,9 @@ int main(int argc, char **argv) {
   char *src = sys_file_read(in_path);
   if (!src) {
     fprintf(stderr, "Error: could not open '%s'\n", in_path);
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
 
@@ -76,6 +79,9 @@ int main(int argc, char **argv) {
     out = fopen(out_path, "w");
     if (!out) {
       fprintf(stderr, "Error: could not open '%s' for writing\n", out_path);
+      free(HEAP);
+      free(BOOK);
+      free(TABLE);
       return 1;
     }
   }

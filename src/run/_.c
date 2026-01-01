@@ -1209,8 +1209,8 @@ int main(int argc, char **argv) {
   u32 threads = (num_threads > 0) ? (u32)num_threads : 1;
   if (do_collapse && num_threads == 0) {
     // Auto-detect cores for collapse mode
-    threads = sysconf(_SC_NPROCESSORS_ONLN);
-    if (threads == 0) threads = 1;
+    long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+    threads = (ncpus > 0) ? (u32)ncpus : 1;
   }
   thread_set_count(threads);
   wnf_set_tid(0);

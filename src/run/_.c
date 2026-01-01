@@ -223,6 +223,14 @@ fn void ffi_workers_start(void) {
     int err = pthread_create(&FFI_WORKERS[i], NULL, ffi_worker_thread, NULL);
     if (err != 0) {
       fprintf(stderr, "FFI: failed to create worker thread %d: %s\n", i, strerror(err));
+      // Stop already-created workers before exiting
+      atomic_store(&FFI_WORKERS_RUNNING, 0);
+      pthread_mutex_lock(&FFI_QUEUE_MUTEX);
+      pthread_cond_broadcast(&FFI_QUEUE_COND);
+      pthread_mutex_unlock(&FFI_QUEUE_MUTEX);
+      for (int j = 0; j < i; j++) {
+        pthread_join(FFI_WORKERS[j], NULL);
+      }
       exit(1);
     }
   }

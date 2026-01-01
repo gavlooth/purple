@@ -770,13 +770,13 @@ fn Term ffi_execute(Term name_term, Term args) {
 
     // Get remaining args
     Term rest = args;
-    if (term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    if (term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       rest = HEAP[term_val(rest) + 1];
     }
 
     double a[8] = {0};
     int argc = 0;
-    while (argc < 8 && term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    while (argc < 8 && term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       u32 loc = term_val(rest);
       Term arg = HEAP[loc];
       a[argc] = ffi_extract_double(arg);
@@ -791,7 +791,7 @@ fn Term ffi_execute(Term name_term, Term args) {
   // ffi-await: Block until future completes and return result
   if (strcmp(name, "ffi-await") == 0) {
     // arg0 should be #Pend{future_id}
-    if (term_tag(arg0) >= C00 && term_ext(arg0) == FFI_NAM_PEND) {
+    if (term_tag(arg0) >= C00 && term_tag(arg0) <= C16 && term_ext(arg0) == FFI_NAM_PEND) {
       u32 loc = term_val(arg0);
       Term fid_term = HEAP[loc];
       if (term_tag(fid_term) == NUM) {
@@ -809,7 +809,7 @@ fn Term ffi_execute(Term name_term, Term args) {
   // Returns 1 if ready, 0 if still pending
   if (strcmp(name, "ffi-poll") == 0) {
     u32 fid = 0;
-    if (term_tag(arg0) >= C00 && term_ext(arg0) == FFI_NAM_PEND) {
+    if (term_tag(arg0) >= C00 && term_tag(arg0) <= C16 && term_ext(arg0) == FFI_NAM_PEND) {
       u32 loc = term_val(arg0);
       Term fid_term = HEAP[loc];
       if (term_tag(fid_term) == NUM) {
@@ -1064,7 +1064,7 @@ fn void purple_print_result(Term t) {
         while (term_tag(cur) >= C00 && term_tag(cur) <= C16 && term_ext(cur) == NAM_CON) {
           u32 cloc = term_val(cur);
           Term ch = wnf(HEAP[cloc]);
-          if (term_tag(ch) >= C00 && term_ext(ch) == NAM_CHR) {
+          if (term_tag(ch) >= C00 && term_tag(ch) <= C16 && term_ext(ch) == NAM_CHR) {
             Term cv = wnf(HEAP[term_val(ch)]);
             if (term_tag(cv) == NUM) {
               u32 c = term_val(cv);
@@ -1267,7 +1267,11 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Error: failed to get temp file size\n");
     return 1;
   }
-  fseek(tmp, 0, SEEK_SET);
+  if (fseek(tmp, 0, SEEK_SET) != 0) {
+    fclose(tmp);
+    fprintf(stderr, "Error: failed to seek in temp file\n");
+    return 1;
+  }
   char *hvm4_src = malloc(size + 1);
   if (!hvm4_src) {
     fclose(tmp);

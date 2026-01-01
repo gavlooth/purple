@@ -351,10 +351,10 @@ fn int purple_match_needs_runtime(Term cases) {
       if (nam == PURPLEC_NAM_CON && purple_ctr_arity(curr) == 2) {
         Term case_term = purple_ctr_arg(curr, 0);
         // Case now has 3 args: pattern, guard, body
-        if (term_tag(case_term) >= C00 && term_ext(case_term) == PURPLEC_NAM_CASE && purple_ctr_arity(case_term) == 3) {
+        if (term_tag(case_term) >= C00 && term_tag(case_term) <= C16 && term_ext(case_term) == PURPLEC_NAM_CASE && purple_ctr_arity(case_term) == 3) {
           // Check if case has a guard (guard is not #NIL)
           Term guard = purple_ctr_arg(case_term, 1);
-          if (term_tag(guard) >= C00) {
+          if (term_tag(guard) >= C00 && term_tag(guard) <= C16) {
             u32 guard_nam = term_ext(guard);
             if (guard_nam != PURPLEC_NAM_NIL) {
               // Has a guard - needs runtime for guard evaluation
@@ -439,7 +439,7 @@ fn void purple_emit_native_match(PurpleEmit *e, Term scrutinee, Term cases) {
         first = 0;
 
         // Each case is #Case{pattern, guard, body}
-        if (term_tag(case_term) >= C00 && term_ext(case_term) == PURPLEC_NAM_CASE) {
+        if (term_tag(case_term) >= C00 && term_tag(case_term) <= C16 && term_ext(case_term) == PURPLEC_NAM_CASE) {
           Term pattern = purple_ctr_arg(case_term, 0);
           Term body = purple_ctr_arg(case_term, 2);
 

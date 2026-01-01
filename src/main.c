@@ -92,7 +92,15 @@ int main(int argc, char **argv) {
   // Always use Purple runtime (includes Pink runtime + Purple extensions)
   char runtime_path[4096];
   purple_runtime_path(runtime_path, sizeof(runtime_path), argv[0]);
-  purple_compile_emit_runtime(out, ast, runtime_path);
+  if (purple_compile_emit_runtime(out, ast, runtime_path) != 0) {
+    if (out != stdout) {
+      fclose(out);
+    }
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
+    return 1;
+  }
 
   if (out != stdout) {
     fclose(out);

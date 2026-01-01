@@ -1236,6 +1236,9 @@ int main(int argc, char **argv) {
   char *src = sys_file_read(in_path);
   if (!src) {
     fprintf(stderr, "Error: could not open '%s'\n", in_path);
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
 
@@ -1255,6 +1258,9 @@ int main(int argc, char **argv) {
   FILE *tmp = tmpfile();
   if (!tmp) {
     fprintf(stderr, "Error: could not create temp file\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
 
@@ -1267,17 +1273,26 @@ int main(int argc, char **argv) {
   if (fseek(tmp, 0, SEEK_END) != 0) {
     fclose(tmp);
     fprintf(stderr, "Error: failed to seek to end of temp file\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
   long size = ftell(tmp);
   if (size < 0) {
     fclose(tmp);
     fprintf(stderr, "Error: failed to get temp file size\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
   if (fseek(tmp, 0, SEEK_SET) != 0) {
     fclose(tmp);
     fprintf(stderr, "Error: failed to seek in temp file\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
   char *hvm4_src = malloc(size + 1);
@@ -1290,6 +1305,9 @@ int main(int argc, char **argv) {
   if ((long)bytes_read != size) {
     free(hvm4_src);
     fprintf(stderr, "Error: failed to read temp file\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
   hvm4_src[size] = '\0';
@@ -1316,6 +1334,9 @@ int main(int argc, char **argv) {
   u32 main_id = table_find("main", 4);
   if (BOOK[main_id] == 0) {
     fprintf(stderr, "Error: @main not defined\n");
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     return 1;
   }
 

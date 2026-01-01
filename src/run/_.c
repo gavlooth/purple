@@ -1329,6 +1329,10 @@ int main(int argc, char **argv) {
   char *hvm4_src = malloc(size + 1);
   if (!hvm4_src) {
     fclose(tmp);
+    ffi_workers_stop();
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     sys_error("out of memory allocating HVM4 source buffer");
   }
   size_t bytes_read = fread(hvm4_src, 1, size, tmp);

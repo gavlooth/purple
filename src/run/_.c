@@ -1268,9 +1268,14 @@ int main(int argc, char **argv) {
     fclose(tmp);
     sys_error("out of memory allocating HVM4 source buffer");
   }
-  fread(hvm4_src, 1, size, tmp);
-  hvm4_src[size] = '\0';
+  size_t bytes_read = fread(hvm4_src, 1, size, tmp);
   fclose(tmp);
+  if ((long)bytes_read != size) {
+    free(hvm4_src);
+    fprintf(stderr, "Error: failed to read temp file\n");
+    return 1;
+  }
+  hvm4_src[size] = '\0';
 
   // Reset heap for HVM4
   memset(HEAP, 0, HEAP_CAP * sizeof(Term));

@@ -334,9 +334,14 @@ fn int eval_expr(const char *src) {
     fprintf(stderr, "Error: out of memory\n");
     return 1;
   }
-  fread(main_src, 1, size, tmp);
-  main_src[size] = '\0';
+  size_t bytes_read = fread(main_src, 1, size, tmp);
   fclose(tmp);
+  if ((long)bytes_read != size) {
+    free(main_src);
+    fprintf(stderr, "Error: failed to read temp file\n");
+    return 1;
+  }
+  main_src[size] = '\0';
 
   // Parse main definition
   PState ms = {

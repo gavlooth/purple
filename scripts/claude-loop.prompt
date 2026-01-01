@@ -2,14 +2,15 @@ You are running an automated fix loop in this repository.
 
 Goal (one per run):
 - First, read BUGS.md and FIXME.md. If either lists open/unresolved items, pick the earliest unresolved item and fix it.
-- Only when both files have no open/unresolved items, find ONE concrete issue (failing test, compiler error, clear bug, crash, UB, TODO/FIXME with evidence) and fix it.
+- Only when both files have no open/unresolved items, find ONE concrete issue (failing test, implementation gap,  compiler error, clear bug, crash, UB, TODO/FIXME with evidence) and fix it.
 - Keep the change minimal and safe.
 
 Constraints:
 - Follow all project constraints in CLAUDE.md and AGENTS.md .
+- do not touch hvm4 repo
 - Do not refactor broadly or change architecture.
 - Do not add new features.
-- Do not run git commit; leave changes unstaged.
+- run git commit and push; .
 
 Validation:
 - Prefer targeted checks. If needed, run: `make test` (or `./tests.sh`).

@@ -267,6 +267,12 @@ fn u32 ffi_spawn_async(void* fn_ptr, int call_type, int argc,
   // Enqueue task
   pthread_mutex_lock(&FFI_QUEUE_MUTEX);
   u32 head = atomic_load(&FFI_QUEUE_HEAD);
+  u32 tail = atomic_load(&FFI_QUEUE_TAIL);
+  if (head - tail >= FFI_QUEUE_SIZE) {
+    pthread_mutex_unlock(&FFI_QUEUE_MUTEX);
+    fprintf(stderr, "FFI: task queue overflow\n");
+    return 0;
+  }
   FFI_TASK_QUEUE[head % FFI_QUEUE_SIZE].future_id = fid;
   atomic_store(&FFI_QUEUE_HEAD, head + 1);
   pthread_cond_signal(&FFI_QUEUE_COND);

@@ -47,6 +47,9 @@ int main(int argc, char **argv) {
   TABLE = calloc(BOOK_CAP, sizeof(char*));
 
   if (!BOOK || !HEAP || !TABLE) {
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     sys_error("Memory allocation failed");
   }
   heap_init_slices();

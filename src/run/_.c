@@ -1160,7 +1160,8 @@ fn void purple_print_result(Term t) {
 }
 
 // Read runtime and emit it
-fn void emit_runtime(FILE *out, const char *argv0) {
+// Returns 0 on success, 1 on failure
+fn int emit_runtime(FILE *out, const char *argv0) {
   char runtime_path[4096];
   char *abs = realpath(argv0, NULL);
 #ifdef __linux__
@@ -1176,10 +1177,11 @@ fn void emit_runtime(FILE *out, const char *argv0) {
   char *runtime = sys_file_read(runtime_path);
   if (!runtime) {
     fprintf(stderr, "Error: could not read runtime '%s'\n", runtime_path);
-    exit(1);
+    return 1;
   }
   fputs(runtime, out);
   free(runtime);
+  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -1235,6 +1237,9 @@ int main(int argc, char **argv) {
   TABLE = calloc(BOOK_CAP, sizeof(char*));
 
   if (!BOOK || !HEAP || !TABLE) {
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
     sys_error("Memory allocation failed");
   }
   heap_init_slices();
@@ -1280,7 +1285,14 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  emit_runtime(tmp, argv[0]);
+  if (emit_runtime(tmp, argv[0]) != 0) {
+    fclose(tmp);
+    ffi_workers_stop();
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
+    return 1;
+  }
   fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0, #NIL, #NIL), ", tmp);
   purple_compile_emit(tmp, ast);
   fputs("))\n", tmp);

@@ -220,7 +220,11 @@ fn void* ffi_worker_thread(void* arg) {
 fn void ffi_workers_start(void) {
   atomic_store(&FFI_WORKERS_RUNNING, 1);
   for (int i = 0; i < FFI_NUM_WORKERS; i++) {
-    pthread_create(&FFI_WORKERS[i], NULL, ffi_worker_thread, NULL);
+    int err = pthread_create(&FFI_WORKERS[i], NULL, ffi_worker_thread, NULL);
+    if (err != 0) {
+      fprintf(stderr, "FFI: failed to create worker thread %d: %s\n", i, strerror(err));
+      exit(1);
+    }
   }
 }
 

@@ -1223,12 +1223,13 @@ fn void purple_compile_emit(FILE *out, Term ast) {
   purple_compile_emit_term(&e, ast);
 }
 
-fn void purple_compile_emit_runtime(FILE *out, Term ast, const char *runtime_path) {
+// Returns 0 on success, 1 on failure
+fn int purple_compile_emit_runtime(FILE *out, Term ast, const char *runtime_path) {
   // Read and emit the runtime library
   char *runtime = sys_file_read(runtime_path);
   if (!runtime) {
     fprintf(stderr, "Error: could not read runtime '%s'\n", runtime_path);
-    exit(1);
+    return 1;
   }
   fputs(runtime, out);
   free(runtime);
@@ -1237,4 +1238,5 @@ fn void purple_compile_emit_runtime(FILE *out, Term ast, const char *runtime_pat
   fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0)(#NIL)(#NIL))(", out);
   purple_compile_emit(out, ast);
   fputs("))\n", out);
+  return 0;
 }

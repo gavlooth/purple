@@ -325,7 +325,11 @@ fn int eval_expr(const char *src) {
   purple_compile_emit(tmp, ast);
   fputs("))\n", tmp);
 
-  fseek(tmp, 0, SEEK_END);
+  if (fseek(tmp, 0, SEEK_END) != 0) {
+    fclose(tmp);
+    fprintf(stderr, "Error: failed to seek to end of temp file\n");
+    return 1;
+  }
   long size = ftell(tmp);
   if (size < 0) {
     fclose(tmp);

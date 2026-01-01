@@ -931,7 +931,7 @@ fn Term ffi_eval_with_menv(Term menv, Term expr) {
 
 // Evaluate a Purple code term by building and running HVM4
 fn Term ffi_eval_code(Term code) {
-  // Build HVM4 expression: @purple_unwrap(@purple_eval(@purple_menv_new(0, #NIL, #NIL), code))
+  // Build HVM4 expression: @purple_unwrap(@purple_eval(@purple_menv_new(0)(#NIL)(#NIL))(code))
   // For simplicity, we just evaluate through SNF if it's a simple value
 
   // Check if code is already a simple value
@@ -1293,7 +1293,7 @@ int main(int argc, char **argv) {
     free(TABLE);
     return 1;
   }
-  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0, #NIL, #NIL), ", tmp);
+  fputs("\n@main = @purple_unwrap(@purple_eval(@purple_menv_new(0)(#NIL)(#NIL))(", tmp);
   purple_compile_emit(tmp, ast);
   fputs("))\n", tmp);
 

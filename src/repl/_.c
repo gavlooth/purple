@@ -247,14 +247,15 @@ fn void get_runtime_path(char *out, int size, const char *argv0) {
 // Global state for runtime
 static char *runtime_src = NULL;
 
-fn void load_runtime(const char *argv0) {
+fn int load_runtime(const char *argv0) {
   char runtime_path[4096];
   get_runtime_path(runtime_path, sizeof(runtime_path), argv0);
   runtime_src = sys_file_read(runtime_path);
   if (!runtime_src) {
     fprintf(stderr, "Error: could not read runtime '%s'\n", runtime_path);
-    exit(1);
+    return 0;
   }
+  return 1;
 }
 
 fn void show_help(void) {
@@ -503,7 +504,12 @@ int main(int argc, char **argv) {
   ffi_names_init();
 
   // Load runtime
-  load_runtime(argv[0]);
+  if (!load_runtime(argv[0])) {
+    free(HEAP);
+    free(BOOK);
+    free(TABLE);
+    return 1;
+  }
 
   printf("Purple REPL v0.1 - Type :help for commands\n");
   printf("Tower of Interpreters ready.\n\n");

@@ -327,6 +327,11 @@ fn int eval_expr(const char *src) {
 
   fseek(tmp, 0, SEEK_END);
   long size = ftell(tmp);
+  if (size < 0) {
+    fclose(tmp);
+    fprintf(stderr, "Error: failed to get temp file size\n");
+    return 1;
+  }
   fseek(tmp, 0, SEEK_SET);
   char *main_src = malloc(size + 1);
   if (!main_src) {

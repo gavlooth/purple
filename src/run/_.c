@@ -639,21 +639,21 @@ fn Term ffi_execute(Term name_term, Term args) {
 
     // Get remaining args from the list
     Term rest = args;
-    if (term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    if (term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       rest = HEAP[term_val(rest) + 1];  // tail
     }
 
     // Extract up to 4 arguments
     intptr_t a[4] = {0, 0, 0, 0};
     int argc = 0;
-    while (argc < 4 && term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    while (argc < 4 && term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       u32 loc = term_val(rest);
       Term arg = HEAP[loc];
 
       // Check argument type
-      if (term_tag(arg) >= C00 && term_ext(arg) == FFI_NAM_PTR) {
+      if (term_tag(arg) >= C00 && term_tag(arg) <= C16 && term_ext(arg) == FFI_NAM_PTR) {
         a[argc] = (intptr_t)ffi_extract_pointer(arg);
-      } else if (term_tag(arg) >= C00 && term_ext(arg) == FFI_NAM_FIX) {
+      } else if (term_tag(arg) >= C00 && term_tag(arg) <= C16 && term_ext(arg) == FFI_NAM_FIX) {
         // Fixed-point: pass as double bits (for float functions)
         double d = ffi_extract_double(arg);
         a[argc] = *(intptr_t*)&d;
@@ -695,13 +695,13 @@ fn Term ffi_execute(Term name_term, Term args) {
 
     // Get remaining args
     Term rest = args;
-    if (term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    if (term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       rest = HEAP[term_val(rest) + 1];
     }
 
     double a[4] = {0, 0, 0, 0};
     int argc = 0;
-    while (argc < 4 && term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    while (argc < 4 && term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       u32 loc = term_val(rest);
       Term arg = HEAP[loc];
       a[argc] = ffi_extract_double(arg);
@@ -738,16 +738,16 @@ fn Term ffi_execute(Term name_term, Term args) {
 
     // Get remaining args
     Term rest = args;
-    if (term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    if (term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       rest = HEAP[term_val(rest) + 1];
     }
 
     intptr_t a[8] = {0};
     int argc = 0;
-    while (argc < 8 && term_tag(rest) >= C00 && term_ext(rest) == NAM_CON) {
+    while (argc < 8 && term_tag(rest) >= C00 && term_tag(rest) <= C16 && term_ext(rest) == NAM_CON) {
       u32 loc = term_val(rest);
       Term arg = HEAP[loc];
-      if (term_tag(arg) >= C00 && term_ext(arg) == FFI_NAM_PTR) {
+      if (term_tag(arg) >= C00 && term_tag(arg) <= C16 && term_ext(arg) == FFI_NAM_PTR) {
         a[argc] = (intptr_t)ffi_extract_pointer(arg);
       } else {
         a[argc] = ffi_extract_int(arg);
@@ -1262,6 +1262,11 @@ int main(int argc, char **argv) {
   // Rewind and read as string
   fseek(tmp, 0, SEEK_END);
   long size = ftell(tmp);
+  if (size < 0) {
+    fclose(tmp);
+    fprintf(stderr, "Error: failed to get temp file size\n");
+    return 1;
+  }
   fseek(tmp, 0, SEEK_SET);
   char *hvm4_src = malloc(size + 1);
   if (!hvm4_src) {
